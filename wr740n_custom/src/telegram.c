@@ -3,17 +3,18 @@
 #include "json_util.h"
 
 #include <ctype.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
-#define TG_REQ_FILE  "/tmp/rmeter/tg_req.json"
-#define TG_RESP_FILE "/tmp/rmeter/tg_resp.json"
 #define TG_CA_FILE   "/etc/rmeter/tg_ca.pem"
 
-static pthread_mutex_t s_tg_http_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t s_tg_seq_lock = PTHREAD_MUTEX_INITIALIZER;
+static unsigned s_tg_req_seq = 0;
 static bool s_tg_thread_started = false;
 
 typedef struct {
@@ -94,33 +95,146 @@ static bool tg_is_admin(const char *chat_id) {
     return false;
 }
 
-static bool tg_post_api(const char *method, const char *json_body, char *resp_buf, size_t resp_sz) {
-    if (!g_config.tg_token[0]) return false;
-    pthread_mutex_lock(&s_tg_http_lock);
+static size_t url_encode(const char *src, char *dst, size_t dst_sz) {
+    static const char hex[] = "0123456789ABCDEF";
+    size_t pos = 0;
+    if (!dst || dst_sz == 0) return 0;
+    if (!src) {
+        dst[0] = '\0';
+        return 0;
+    }
+    for (const unsigned char *p = (const unsigned char *)src; *p && pos + 4 <= dst_sz; p++) {
+        unsigned char c = *p;
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+            (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+            dst[pos++] = (char)c;
+        } else {
+            dst[pos++] = '%';
+            dst[pos++] = hex[c >> 4];
+            dst[pos++] = hex[c & 0x0F];
+        }
+    }
+    dst[pos] = '\0';
+    return pos;
+}
 
-    FILE *fp = fopen(TG_REQ_FILE, "w");
-    if (!fp) {
-        pthread_mutex_unlock(&s_tg_http_lock);
+static bool run_uclient_fetch(const char *ca_opt, int timeout_s, const char *post_data,
+                              const char *resp_file, const char *url,
+                              char *err_buf, size_t err_sz) {
+    if (err_buf && err_sz > 0) err_buf[0] = '\0';
+
+    size_t post_len = post_data ? strlen(post_data) : 0;
+    char *post_arg = NULL;
+    if (post_len > 0) {
+        post_arg = malloc(12 + post_len + 1);
+        if (!post_arg) return false;
+        memcpy(post_arg, "--post-data=", 12);
+        memcpy(post_arg + 12, post_data, post_len + 1);
+    }
+
+    char tmo_str[16];
+    snprintf(tmo_str, sizeof(tmo_str), "%d", timeout_s > 0 ? timeout_s : 15);
+
+    int err_pipe[2] = {-1, -1};
+    bool has_pipe = (pipe(err_pipe) == 0);
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        if (has_pipe) { close(err_pipe[0]); close(err_pipe[1]); }
+        free(post_arg);
         return false;
     }
-    fputs(json_body, fp);
-    fclose(fp);
+    if (pid == 0) {
+        int devnull_r = open("/dev/null", O_RDONLY);
+        if (devnull_r >= 0) { dup2(devnull_r, STDIN_FILENO); close(devnull_r); }
+        int devnull_w = open("/dev/null", O_WRONLY);
+        if (devnull_w >= 0) { dup2(devnull_w, STDOUT_FILENO); close(devnull_w); }
+        if (has_pipe) {
+            close(err_pipe[0]);
+            dup2(err_pipe[1], STDERR_FILENO);
+            close(err_pipe[1]);
+        }
 
-    char cmd[512];
-    const char *ca_opt = (access(TG_CA_FILE, R_OK) == 0)
-                             ? "--ca-certificate=" TG_CA_FILE
-                             : "--no-check-certificate";
+        char *argv[12];
+        int argc = 0;
+        argv[argc++] = "uclient-fetch";
+        argv[argc++] = "-4";
+        argv[argc++] = "-T";
+        argv[argc++] = tmo_str;
+        argv[argc++] = (char *)ca_opt;
+        if (post_arg) argv[argc++] = post_arg;
+        argv[argc++] = "-O";
+        argv[argc++] = (char *)resp_file;
+        argv[argc++] = (char *)url;
+        argv[argc] = NULL;
 
-    /* Prefer uclient-fetch (lightweight native OpenWrt HTTPS via libustream-mbedtls) */
-    snprintf(cmd, sizeof(cmd),
-             "uclient-fetch -q -T 20 %s --post-file=%s -O %s "
-             "\"https://api.telegram.org/bot%s/%s\" 2>/dev/null",
-             ca_opt, TG_REQ_FILE, TG_RESP_FILE, g_config.tg_token, method);
+        execvp("uclient-fetch", argv);
+        _exit(127);
+    }
 
-    int rc = system(cmd);
+    free(post_arg);
+    if (has_pipe) {
+        close(err_pipe[1]);
+        size_t off = 0;
+        if (err_buf && err_sz > 1) {
+            while (off + 1 < err_sz) {
+                ssize_t r = read(err_pipe[0], err_buf + off, err_sz - 1 - off);
+                if (r <= 0) break;
+                off += (size_t)r;
+            }
+            err_buf[off] = '\0';
+        }
+        char drain[128];
+        while (read(err_pipe[0], drain, sizeof(drain)) > 0) {}
+        close(err_pipe[0]);
+    }
+
+    int status = 0;
+    if (waitpid(pid, &status, 0) < 0) return false;
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+static bool tg_post_api(const char *method, const char *form_body, char *resp_buf,
+                        size_t resp_sz, int timeout_s, int *out_http_err) {
+    if (out_http_err) *out_http_err = 0;
+    if (!g_config.tg_token[0] || !method) return false;
+
+    pthread_mutex_lock(&s_tg_seq_lock);
+    unsigned seq = ++s_tg_req_seq;
+    pthread_mutex_unlock(&s_tg_seq_lock);
+
+    char resp_file[64];
+    snprintf(resp_file, sizeof(resp_file), "/tmp/rmeter/tg_resp_%u.json", seq);
+
+    char url[256];
+    snprintf(url, sizeof(url), "https://api.telegram.org/bot%s/%s", g_config.tg_token, method);
+
+    bool has_ca = (access(TG_CA_FILE, R_OK) == 0);
+    const char *ca_opt = has_ca ? ("--ca-certificate=" TG_CA_FILE) : "--no-check-certificate";
+
+    char err_txt[512];
+    bool proc_ok = false;
+    int http_code = 0;
+    int max_tries = (timeout_s <= 15) ? 3 : 2;
+
+    for (int attempt = 0; attempt < max_tries; attempt++) {
+        const char *cur_ca = (attempt == max_tries - 1 && has_ca)
+                                 ? "--no-check-certificate"
+                                 : ca_opt;
+        unlink(resp_file);
+        proc_ok = run_uclient_fetch(cur_ca, timeout_s, form_body, resp_file, url, err_txt, sizeof(err_txt));
+        const char *he = strstr(err_txt, "HTTP error ");
+        http_code = he ? atoi(he + 11) : 0;
+
+        /* Stop retrying on any real HTTP response or downloaded payload */
+        if (http_code > 0 || (proc_ok && access(resp_file, R_OK) == 0)) break;
+    }
+
+    if (out_http_err) *out_http_err = http_code;
+
     bool ok = false;
-    if (rc == 0) {
-        FILE *rf = fopen(TG_RESP_FILE, "r");
+    if (proc_ok && http_code == 0) {
+        FILE *rf = fopen(resp_file, "r");
         if (rf) {
             if (resp_buf && resp_sz > 0) {
                 size_t n = fread(resp_buf, 1, resp_sz - 1, rf);
@@ -136,26 +250,54 @@ static bool tg_post_api(const char *method, const char *json_body, char *resp_bu
         }
     }
 
-    pthread_mutex_unlock(&s_tg_http_lock);
+    unlink(resp_file);
+    return ok;
+}
+
+static bool tg_send_message_ex(const char *chat_id, const char *text,
+                               const char *reply_markup_json, int *out_http_err) {
+    if (out_http_err) *out_http_err = 0;
+    if (!chat_id || !chat_id[0] || !text) return false;
+
+    size_t cid_len = strlen(chat_id);
+    size_t txt_len = strlen(text);
+    size_t kb_len = (reply_markup_json && reply_markup_json[0]) ? strlen(reply_markup_json) : 0;
+
+    char *enc_cid = malloc(cid_len * 3 + 1);
+    char *enc_txt = malloc(txt_len * 3 + 1);
+    char *enc_kb = kb_len ? malloc(kb_len * 3 + 1) : NULL;
+    if (!enc_cid || !enc_txt || (kb_len && !enc_kb)) {
+        free(enc_cid); free(enc_txt); free(enc_kb);
+        return false;
+    }
+
+    url_encode(chat_id, enc_cid, cid_len * 3 + 1);
+    url_encode(text, enc_txt, txt_len * 3 + 1);
+    if (kb_len) url_encode(reply_markup_json, enc_kb, kb_len * 3 + 1);
+
+    size_t body_sz = strlen(enc_cid) + strlen(enc_txt) + (enc_kb ? strlen(enc_kb) : 0) + 96;
+    char *body = malloc(body_sz);
+    bool ok = false;
+    if (body) {
+        if (enc_kb && enc_kb[0]) {
+            snprintf(body, body_sz, "chat_id=%s&text=%s&parse_mode=HTML&reply_markup=%s",
+                     enc_cid, enc_txt, enc_kb);
+        } else {
+            snprintf(body, body_sz, "chat_id=%s&text=%s&parse_mode=HTML",
+                     enc_cid, enc_txt);
+        }
+        ok = tg_post_api("sendMessage", body, NULL, 0, 6, out_http_err);
+        free(body);
+    }
+
+    free(enc_cid);
+    free(enc_txt);
+    free(enc_kb);
     return ok;
 }
 
 bool telegram_send_message(const char *chat_id, const char *text, const char *reply_markup_json) {
-    if (!chat_id || !chat_id[0] || !text) return false;
-    char esc_text[3072];
-    json_escape(text, esc_text, sizeof(esc_text));
-
-    char body[4096];
-    if (reply_markup_json && reply_markup_json[0]) {
-        snprintf(body, sizeof(body),
-                 "{\"chat_id\":\"%s\",\"text\":\"%s\",\"parse_mode\":\"HTML\",\"reply_markup\":%s}",
-                 chat_id, esc_text, reply_markup_json);
-    } else {
-        snprintf(body, sizeof(body),
-                 "{\"chat_id\":\"%s\",\"text\":\"%s\",\"parse_mode\":\"HTML\"}",
-                 chat_id, esc_text);
-    }
-    return tg_post_api("sendMessage", body, NULL, 0);
+    return tg_send_message_ex(chat_id, text, reply_markup_json, NULL);
 }
 
 bool telegram_broadcast_admins(const char *text, const char *reply_markup_json) {
@@ -176,10 +318,32 @@ bool telegram_send_test(char *err_buf, size_t err_sz) {
         snprintf(err_buf, err_sz, "Missing token or admin chat ID");
         return false;
     }
-    bool ok = telegram_broadcast_admins(
-        "✅ <b>اختبار اتصال بوت راوتر WR740N v4</b>\nالبوت متصل ويعمل بنجاح!", NULL);
-    if (!ok && err_buf) snprintf(err_buf, err_sz, "HTTPS request failed or invalid token/chat_id");
-    return ok;
+    char copy[160];
+    snprintf(copy, sizeof(copy), "%s", g_config.tg_admin_ids);
+    bool any = false;
+    int last_http = 0;
+    char *tok = strtok(copy, ",; ");
+    while (tok) {
+        int hc = 0;
+        if (tg_send_message_ex(tok,
+                "✅ <b>اختبار اتصال بوت راوتر WR740N v4</b>\nالبوت متصل ويعمل بنجاح!",
+                NULL, &hc)) {
+            any = true;
+        } else if (hc > 0) {
+            last_http = hc;
+        }
+        tok = strtok(NULL, ",; ");
+    }
+    if (!any && err_buf) {
+        if (last_http == 400) {
+            snprintf(err_buf, err_sz, "Telegram rejected chat_id (HTTP 400) - press /start in the bot first");
+        } else if (last_http == 401 || last_http == 404) {
+            snprintf(err_buf, err_sz, "Invalid Bot Token (HTTP %d)", last_http);
+        } else {
+            snprintf(err_buf, err_sz, "HTTPS request failed or invalid token/chat_id");
+        }
+    }
+    return any;
 }
 
 static int parse_thresholds(uint8_t out[RMETER_MAX_THRESHOLDS]) {
@@ -496,9 +660,10 @@ static void handle_command(const char *chat_id, const char *text) {
 }
 
 static void handle_callback(const char *cb_id, const char *chat_id, const char *data) {
-    char ans_body[256];
-    snprintf(ans_body, sizeof(ans_body), "{\"callback_query_id\":\"%s\"}", cb_id);
-    tg_post_api("answerCallbackQuery", ans_body, NULL, 0);
+    char enc_cb[256], ans_body[320];
+    url_encode(cb_id, enc_cb, sizeof(enc_cb));
+    snprintf(ans_body, sizeof(ans_body), "callback_query_id=%s", enc_cb);
+    tg_post_api("answerCallbackQuery", ans_body, NULL, 0, 10, NULL);
 
     if (!tg_is_admin(chat_id)) return;
 
@@ -620,8 +785,8 @@ static void *tg_poll_thread(void *arg) {
         }
         char body[192];
         long long offset = g_config.tg_last_update_id + 1;
-        snprintf(body, sizeof(body), "{\"offset\":%lld,\"timeout\":15,\"limit\":5}", offset);
-        if (tg_post_api("getUpdates", body, resp, 16384)) {
+        snprintf(body, sizeof(body), "offset=%lld&timeout=15&limit=5", offset);
+        if (tg_post_api("getUpdates", body, resp, 16384, 25, NULL)) {
             process_updates_json(resp);
         } else {
             sleep(5);
