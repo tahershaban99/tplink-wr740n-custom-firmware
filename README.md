@@ -20,8 +20,8 @@ Custom lightweight, IPv6-free OpenWrt **18.06.9** (`ar71xx/tiny`) firmware and C
 
 ## Pre-Built Checksums (`output/sha256sums.txt`)
 
-- `routermeter-wr740n-v4-sysupgrade.bin`: `32e0e86bd89b757f01cad3aea5129a84228198e42aadf9a879cd76bcf0a81171` (`3,604,484` bytes)
-- `routermeter-wr740n-v4-factory.bin`: `26f6ae78bef6c5ef7d0a29422a4308a06a629cf28f9145498b87de9db348e223` (`3,932,160` bytes)
+- `routermeter-wr740n-v4-sysupgrade.bin`: `183b7edfa4089af128fdf4c3bed341cc57d5349d3bf5897536836a3616427f37` (`3,604,484` bytes)
+- `routermeter-wr740n-v4-factory.bin`: `41792f5e868dff9db7f61ed49e5dd3dec93fa5c972140f973174318e90e2632b` (`3,932,160` bytes)
 
 ## Building (Ubuntu / WSL)
 
@@ -30,3 +30,4 @@ Requires OpenWrt 18.06.9 `ar71xx-tiny` SDK and ImageBuilder configured in `wr740
 ```bash
 bash wr740n_custom/build_final.sh
 ```
+
