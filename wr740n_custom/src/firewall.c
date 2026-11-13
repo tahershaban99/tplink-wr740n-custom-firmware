@@ -145,6 +145,24 @@ void fw_read_counters(rmeter_device_t *devs, int count) {
     parse_chain_counters("RMETER_UL", true, devs, count);
 }
 
+static void add_vip_dscp_pair(const char *ip) {
+    static const char *const specs[] = {
+        "-p udp",
+        "-p icmp",
+        "-p tcp -m length --length 0:300"
+    };
+    static const char *const dirs[] = {"-s", "-d"};
+    char cmd[256];
+    for (int s = 0; s < 3; s++) {
+        for (int d = 0; d < 2; d++) {
+            snprintf(cmd, sizeof(cmd),
+                     "iptables -t mangle -A RMETER_VIP %s %s %s -j DSCP --set-dscp 46 2>/dev/null",
+                     dirs[d], ip, specs[s]);
+            run_cmd(cmd);
+        }
+    }
+}
+
 void fw_sync_blocks_and_vip(rmeter_device_t *devs, int count) {
     char cmd[256];
     run_cmd("iptables -F RMETER_BLK 2>/dev/null");
@@ -166,14 +184,7 @@ void fw_sync_blocks_and_vip(rmeter_device_t *devs, int count) {
             }
         }
         if (devs[i].gaming_mode && !devs[i].blocked && ip_valid(devs[i].ip)) {
-            snprintf(cmd, sizeof(cmd),
-                     "iptables -t mangle -A RMETER_VIP -s %s -j DSCP --set-dscp 46 2>/dev/null",
-                     devs[i].ip);
-            run_cmd(cmd);
-            snprintf(cmd, sizeof(cmd),
-                     "iptables -t mangle -A RMETER_VIP -d %s -j DSCP --set-dscp 46 2>/dev/null",
-                     devs[i].ip);
-            run_cmd(cmd);
+            add_vip_dscp_pair(devs[i].ip);
         }
     }
 }
@@ -182,8 +193,16 @@ void fw_sync_blocks_and_vip(rmeter_device_t *devs, int count) {
 static void apply_dir_htb(rmeter_device_t *devs, int count, const char *ifname,
                           uint32_t root_kbps, bool is_dl) {
     int major = is_dl ? 1 : 2;
-    uint32_t def_rate = (root_kbps * 30U) / 100U;
-    if (def_rate < 100) def_rate = 100;
+    uint32_t vip_cnt = 0;
+    for (int i = 0; i < count; i++) {
+        if (!devs[i].blocked && ip_valid(devs[i].ip) && devs[i].gaming_mode) vip_cnt++;
+    }
+    uint32_t def_rate = (root_kbps * 10U) / 100U;
+    if (def_rate < 256) def_rate = 256;
+    uint32_t r2q = (root_kbps + 239U) / 240U;
+    if (r2q < 10U) r2q = 10U;
+    uint32_t vip_share = vip_cnt ? ((root_kbps * 80U) / 100U) / vip_cnt : ((root_kbps * 80U) / 100U);
+    if (vip_share < 256) vip_share = 256;
     char cmd[512];
 
     if (!is_dl) {
@@ -192,10 +211,10 @@ static void apply_dir_htb(rmeter_device_t *devs, int count, const char *ifname,
     }
 
     snprintf(cmd, sizeof(cmd),
-             "tc qdisc add dev %s root handle %d: htb default 999 r2q 25 2>/dev/null && "
+             "tc qdisc add dev %s root handle %d: htb default 999 r2q %u 2>/dev/null && "
              "tc class add dev %s parent %d: classid %d:1 htb rate %ukbit ceil %ukbit && "
-             "tc class add dev %s parent %d:1 classid %d:999 htb rate %ukbit ceil %ukbit prio 3",
-             ifname, major, ifname, major, major, root_kbps, root_kbps,
+             "tc class add dev %s parent %d:1 classid %d:999 htb rate %ukbit ceil %ukbit prio 5",
+             ifname, major, r2q, ifname, major, major, root_kbps, root_kbps,
              ifname, major, major, def_rate, root_kbps);
     if (run_cmd(cmd) != 0) return;
 
@@ -210,7 +229,7 @@ static void apply_dir_htb(rmeter_device_t *devs, int count, const char *ifname,
 
         unsigned int cid = 0x10U + (unsigned int)i;
         uint32_t ceil_k = (cap > 0 && cap < root_kbps) ? cap : (cap > 0 ? cap : root_kbps);
-        uint32_t rate_k = (cap > 0) ? cap : ((root_kbps * 70U) / 100U);
+        uint32_t rate_k = (cap > 0) ? cap : (devs[i].gaming_mode ? vip_share : def_rate);
         if (rate_k < 64) rate_k = 64;
         if (rate_k > ceil_k) rate_k = ceil_k;
         int prio = devs[i].gaming_mode ? 1 : 3;
