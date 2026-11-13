@@ -94,6 +94,8 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
         if (json_get_bool(req, "blocked", &b)) meter_set_device_blocked(mac, b, false);
         bool g = false;
         if (json_get_bool(req, "gaming_mode", &g)) meter_set_device_gaming(mac, g);
+        bool su = false;
+        if (json_get_bool(req, "speed_unlocked", &su)) meter_set_device_speed_unlocked(mac, su);
         if (json_get_str(req, "tg_chat_id", chat, sizeof(chat))) meter_set_device_telegram(mac, chat);
         if (json_get_str(req, "bound_ip", bound_ip, sizeof(bound_ip))) {
             char cur_name[48] = {0};
@@ -125,6 +127,14 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
         json_get_str(req, "mac", mac, sizeof(mac));
         json_get_bool(req, "gaming_mode", &vip);
         bool ok = meter_set_device_gaming(mac, vip);
+        if (ok) { meter_save_all(); meter_write_ram_json(); }
+        snprintf(resp, resp_sz, "{\"ok\":%s}", ok ? "true" : "false");
+    } else if (strcmp(action, "device_speed_unlock") == 0) {
+        char mac[32] = {0};
+        bool unl = false;
+        json_get_str(req, "mac", mac, sizeof(mac));
+        json_get_bool(req, "speed_unlocked", &unl);
+        bool ok = meter_set_device_speed_unlocked(mac, unl);
         if (ok) { meter_save_all(); meter_write_ram_json(); }
         snprintf(resp, resp_sz, "{\"ok\":%s}", ok ? "true" : "false");
     } else if (strcmp(action, "device_add_quota") == 0) {

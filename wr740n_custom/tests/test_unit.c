@@ -90,6 +90,20 @@ static void test_meter_scaling_and_quota(void) {
     assert(g_devices[0].cap_up_kbps == 2000 && g_devices[0].cap_down_kbps == 5000);
     assert(g_tc_dirty);
 
+    /* Unlock full speed without altering saved cap values */
+    g_tc_dirty = false;
+    assert(meter_set_device_speed_unlocked("11:22:33:44:55:66", true));
+    assert(g_devices[0].speed_unlocked);
+    assert(g_devices[0].cap_up_kbps == 2000 && g_devices[0].cap_down_kbps == 5000);
+    assert(g_tc_dirty);
+    /* Saving unrelated fields (same caps) preserves speed_unlocked */
+    assert(meter_set_device_speed_cap("11:22:33:44:55:66", 2000, 5000));
+    assert(g_devices[0].speed_unlocked);
+    /* Saving new cap values re-engages cap enforcement */
+    assert(meter_set_device_speed_cap("11:22:33:44:55:66", 3000, 6000));
+    assert(!g_devices[0].speed_unlocked);
+    assert(g_devices[0].cap_up_kbps == 3000 && g_devices[0].cap_down_kbps == 6000);
+
     /* Verify binding, telegram, reset & delete */
     assert(meter_set_device_binding("11:22:33:44:55:66", "192.168.1.55"));
     assert(strcmp(g_devices[0].bound_ip, "192.168.1.55") == 0);

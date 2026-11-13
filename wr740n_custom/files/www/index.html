@@ -120,14 +120,17 @@ tbody tr.vip{background:rgba(168,85,247,.06)}
 .cap-box{display:inline-flex;align-items:center;gap:3px;border-radius:8px;padding:2px 5px;border:1px solid var(--brd);background:rgba(0,0,0,.28)}
 .cap-box.dn{border-color:rgba(16,185,129,.45)}
 .cap-box.up{border-color:rgba(239,68,68,.45)}
+.cap-box.unlocked{border-color:#06b6d4;background:rgba(6,182,212,.14);box-shadow:0 0 8px rgba(6,182,212,.3)}
 .cap-box input{background:transparent;border:none;outline:none;width:44px;text-align:center;font-size:12px;font-weight:700}
 .cap-box input.dirty{color:var(--warn)}
 .cap-lbl{font-size:10.5px;color:var(--muted);text-align:center;margin-top:3px}
+.cap-lbl.unlocked{color:#22d3ee;font-weight:700}
 .c-inline{display:flex;align-items:center;gap:4px}
 .act-cell{display:flex;align-items:center;gap:4px;white-space:nowrap}
 .act-cell .btn.sm{padding:5px 7px;min-width:30px}
 [data-theme="light"] .tinp,[data-theme="light"] .cap-box,[data-theme="light"] th{background:rgba(255,255,255,.78)}
 .btn.active-vip{background:linear-gradient(135deg,#9333ea,#c084fc);color:#fff;border-color:#e9d5ff;box-shadow:0 0 12px rgba(168,85,247,.55)}
+.btn.active-unlim{background:linear-gradient(135deg,#059669,#06b6d4);color:#fff;border-color:#a5f3fc;box-shadow:0 0 12px rgba(6,182,212,.55)}
 .btn.save-btn{opacity:.82}
 .btn.save-btn.dirty-save{opacity:1;background:linear-gradient(135deg,var(--pri),var(--pri2));border-color:transparent;color:#fff;box-shadow:0 0 10px rgba(225,29,72,.4)}
 canvas{width:100%;height:190px;display:block;border-radius:10px;background:var(--card)}
@@ -668,7 +671,8 @@ function devBadgesHtml(d){
     (d.blocked?`<span class="bdg blk">${d.auto_blocked?'تجاوز الكوتة':'محظور'}</span>`:'');
 }
 function devSpdHtml(d){
-  const rd=d.cap_down_kbps>0?d.cap_down_kbps*1000:50e6, ru=d.cap_up_kbps>0?d.cap_up_kbps*1000:20e6;
+  const unl=!!d.speed_unlocked;
+  const rd=(!unl&&d.cap_down_kbps>0)?d.cap_down_kbps*1000:50e6, ru=(!unl&&d.cap_up_kbps>0)?d.cap_up_kbps*1000:20e6;
   const pd=Math.min(100,((d.cur_down_bps||0)*100)/rd), pu=Math.min(100,((d.cur_up_bps||0)*100)/ru);
   return {
     txtD:fmtBps(d.cur_down_bps), txtU:fmtBps(d.cur_up_bps),
@@ -686,10 +690,11 @@ function devQuotaStats(d){
     showBar:qb>0
   };
 }
-function devCapLabel(d){return (d.cap_down_kbps>0||d.cap_up_kbps>0)?'محدد Mbps':'مفتوح Mbps';}
+function devCapLabel(d){if(d.speed_unlocked)return '🚀 سرعة مفتوحة (تجاوز التحديد)';return (d.cap_down_kbps>0||d.cap_up_kbps>0)?'محدد Mbps':'مفتوح Mbps';}
 function devRowBtns(d,hasDirty){
   return `<button class="btn sm pri save-btn ${hasDirty?'dirty-save':''}" title="حفظ التعديلات" onclick="saveRow('${d.mac}')">💾</button>
     <button class="btn sm ${d.gaming_mode?'active-vip':'vip'}" data-act="vip" title="${d.gaming_mode?'إلغاء وضع VIP':'تفعيل أولوية VIP للألعاب'}" onclick="togVip('${d.mac}',${!d.gaming_mode})">🎮 VIP</button>
+    <button class="btn sm ${d.speed_unlocked?'active-unlim':'ok'}" data-act="unlim" title="${d.speed_unlocked?'إعادة تطبيق تحديد السرعة':'فتح السرعة الكاملة بدون تغيير القيم'}" onclick="togUnlim('${d.mac}',${!d.speed_unlocked})">${d.speed_unlocked?'🔓':'🚀'}</button>
     <button class="btn sm ${d.blocked?'ok':'err'}" data-act="blk" title="${d.blocked?'فك الحظر':'حظر الجهاز'}" onclick="togBlk('${d.mac}',${!d.blocked})">${d.blocked?'✅':'⛔'}</button>
     <button class="btn sm warn" title="تصفير العداد" onclick="rstDev('${d.mac}')">🔄</button>
     <button class="btn sm err" title="حذف الجهاز" onclick="delDev('${d.mac}')">🗑</button>`;
@@ -716,7 +721,8 @@ function patchDevNode(node,d){
   if(q('q-split'))q('q-split').textContent=qs.splitTxt;
   const qb=q('q-bar');
   if(qb){qb.className='bar '+qs.cls+(qs.showBar?'':' hide');qb.firstChild.style.width=qs.w;}
-  if(q('cap-lbl'))q('cap-lbl').textContent=devCapLabel(d);
+  if(q('cap-lbl')){q('cap-lbl').textContent=devCapLabel(d);q('cap-lbl').classList.toggle('unlocked',!!d.speed_unlocked);}
+  node.querySelectorAll('.cap-box').forEach(b=>b.classList.toggle('unlocked',!!d.speed_unlocked));
   const flds={name:v.name,quota:v.quota,capD:v.capD,capU:v.capU,ip:v.ip,tg:v.tg};
   const df=dirtyMap[d.mac]||{};
   Object.keys(flds).forEach(k=>{
@@ -737,6 +743,13 @@ function patchDevNode(node,d){
     vb.className='btn sm '+(d.gaming_mode?'active-vip':'vip');
     vb.title=d.gaming_mode?'إلغاء وضع VIP':'تفعيل أولوية VIP للألعاب';
     vb.setAttribute('onclick',`togVip('${d.mac}',${!d.gaming_mode})`);
+  }
+  const ub=node.querySelector('[data-act="unlim"]');
+  if(ub){
+    ub.className='btn sm '+(d.speed_unlocked?'active-unlim':'ok');
+    ub.textContent=d.speed_unlocked?'🔓':'🚀';
+    ub.title=d.speed_unlocked?'إعادة تطبيق تحديد السرعة':'فتح السرعة الكاملة بدون تغيير القيم';
+    ub.setAttribute('onclick',`togUnlim('${d.mac}',${!d.speed_unlocked})`);
   }
 }
 
@@ -797,16 +810,16 @@ function renderListInto(wrap,list,emptyMsg,isTbl,force){
         </td>
         <td>
           <div class="cap-pair">
-            <div class="cap-box dn" title="أقصى تحميل Mbps (0 = مفتوح)">
+            <div class="cap-box dn${d.speed_unlocked?' unlocked':''}" title="أقصى تحميل Mbps (0 = مفتوح)">
               <input class="${df.capD!==undefined?'dirty':''}" data-f="capD" type="number" step="0.5" min="0" value="${esc(v.capD)}" oninput="onDevInp('${d.mac}','capD',this)" onkeydown="onDevKey(event,'${d.mac}')">
               <span style="color:#34d399;font-size:11px;font-weight:800">↓</span>
             </div>
-            <div class="cap-box up" title="أقصى رفع Mbps (0 = مفتوح)">
+            <div class="cap-box up${d.speed_unlocked?' unlocked':''}" title="أقصى رفع Mbps (0 = مفتوح)">
               <input class="${df.capU!==undefined?'dirty':''}" data-f="capU" type="number" step="0.5" min="0" value="${esc(v.capU)}" oninput="onDevInp('${d.mac}','capU',this)" onkeydown="onDevKey(event,'${d.mac}')">
               <span style="color:#f87171;font-size:11px;font-weight:800">↑</span>
             </div>
           </div>
-          <div class="cap-lbl" data-role="cap-lbl">${devCapLabel(d)}</div>
+          <div class="cap-lbl${d.speed_unlocked?' unlocked':''}" data-role="cap-lbl">${devCapLabel(d)}</div>
         </td>
         <td>
           <input class="${cls('tg','tinp')}" data-f="tg" value="${esc(v.tg)}" placeholder="Chat ID" style="width:98px;font-family:monospace;text-align:center" title="معرف التيليجرام لهذا الجهاز" oninput="onDevInp('${d.mac}','tg',this)" onkeydown="onDevKey(event,'${d.mac}')">
@@ -856,9 +869,9 @@ function renderListInto(wrap,list,emptyMsg,isTbl,force){
           </div>
         </div>
         <div class="cap-pair" style="justify-content:flex-start">
-          <div class="cap-box dn"><input class="${df.capD!==undefined?'dirty':''}" data-f="capD" type="number" step="0.5" min="0" value="${esc(v.capD)}" oninput="onDevInp('${d.mac}','capD',this)" onkeydown="onDevKey(event,'${d.mac}')"><span style="color:#34d399">↓</span></div>
-          <div class="cap-box up"><input class="${df.capU!==undefined?'dirty':''}" data-f="capU" type="number" step="0.5" min="0" value="${esc(v.capU)}" oninput="onDevInp('${d.mac}','capU',this)" onkeydown="onDevKey(event,'${d.mac}')"><span style="color:#f87171">↑</span></div>
-          <span class="cap-lbl" data-role="cap-lbl">${devCapLabel(d)}</span>
+          <div class="cap-box dn${d.speed_unlocked?' unlocked':''}"><input class="${df.capD!==undefined?'dirty':''}" data-f="capD" type="number" step="0.5" min="0" value="${esc(v.capD)}" oninput="onDevInp('${d.mac}','capD',this)" onkeydown="onDevKey(event,'${d.mac}')"><span style="color:#34d399">↓</span></div>
+          <div class="cap-box up${d.speed_unlocked?' unlocked':''}"><input class="${df.capU!==undefined?'dirty':''}" data-f="capU" type="number" step="0.5" min="0" value="${esc(v.capU)}" oninput="onDevInp('${d.mac}','capU',this)" onkeydown="onDevKey(event,'${d.mac}')"><span style="color:#f87171">↑</span></div>
+          <span class="cap-lbl${d.speed_unlocked?' unlocked':''}" data-role="cap-lbl">${devCapLabel(d)}</span>
         </div>
         <div>
           <input class="${cls('tg')}" data-f="tg" value="${esc(v.tg)}" placeholder="Telegram Chat ID" style="width:100%;font-family:monospace" oninput="onDevInp('${d.mac}','tg',this)" onkeydown="onDevKey(event,'${d.mac}')">
@@ -904,6 +917,7 @@ async function saveRow(mac){
 async function addGb(mac,gb){await api('device_add_quota',{mac,add_bytes:Math.round(gb*gbUnit())});if(dirtyMap[mac])delete dirtyMap[mac].quota;toast('تمت إضافة '+gb+' GB');await poll();}
 async function togBlk(mac,blk){await api('device_block',{mac,blocked:blk});toast(blk?'تم الحظر':'تم فك الحظر');await poll();}
 async function togVip(mac,vip){await api('device_gaming',{mac,gaming_mode:vip});toast(vip?'تم تفعيل VIP':'تم إلغاء VIP');await poll();}
+async function togUnlim(mac,unl){await api('device_speed_unlock',{mac,speed_unlocked:unl});toast(unl?'🚀 تم فتح السرعة الكاملة للجهاز':'🔒 تم إعادة تطبيق السرعة المحددة');await poll();}
 async function rstDev(mac){if(!confirm('تصفير عداد هذا الجهاز؟'))return;await api('device_reset',{mac});toast('تم التصفير');await poll();}
 async function delDev(mac){if(!confirm('حذف هذا الجهاز وتصفير إعداداته؟'))return;await api('device_delete',{mac});delete dirtyMap[mac];delete openPin[mac];toast('تم حذف الجهاز');await poll();}
 async function resetAllUsage(){if(!confirm('تصفير استهلاك كل الأجهزة؟'))return;await api('meter_reset_all',{});toast('تم تصفير جميع العدادات');await poll();}

@@ -676,27 +676,31 @@ static void handle_callback(const char *cb_id, const char *chat_id, const char *
         uint64_t used = meter_scaled_bytes(d.up_bytes + d.down_bytes);
         pthread_mutex_unlock(&g_lock);
 
-        char ustr[32], qstr[32], dn[32], up[32], msg[512], kb[512];
+        char ustr[32], qstr[32], dn[32], up[32], msg[640], kb[640];
         fmt_bytes(used, ustr, sizeof(ustr));
         fmt_bytes(d.quota_bytes, qstr, sizeof(qstr));
         fmt_bps(d.cur_down_bps, dn, sizeof(dn));
         fmt_bps(d.cur_up_bps, up, sizeof(up));
         snprintf(msg, sizeof(msg),
                  "📱 <b>%s</b>\nIP: <code>%s</code> | MAC: <code>%s</code>\n"
-                 "⬇️ %s | ⬆️ %s\n📊 %s / %s\nالحالة: %s | VIP: %s",
+                 "⬇️ %s | ⬆️ %s\n📊 %s / %s\nالحالة: %s | VIP: %s | السرعة: %s",
                  d.name[0] ? d.name : d.ip, d.ip, d.mac, dn, up, ustr,
                  d.quota_bytes ? qstr : "مفتوح",
                  d.blocked ? "محظور ⛔" : "نشط 🟢",
-                 d.gaming_mode ? "نعم 🎮" : "لا");
+                 d.gaming_mode ? "نعم 🎮" : "لا",
+                 d.speed_unlocked ? "مفتوحة 🚀" : ((d.cap_down_kbps > 0 || d.cap_up_kbps > 0) ? "محددة 🔒" : "مفتوحة"));
         snprintf(kb, sizeof(kb),
                  "{\"inline_keyboard\":["
                  "[{\"text\":\"%s\",\"callback_data\":\"%s:%s\"},"
                  "{\"text\":\"🎮 VIP\",\"callback_data\":\"vip:%s\"}],"
+                 "[{\"text\":\"%s\",\"callback_data\":\"unlim:%s\"}],"
                  "[{\"text\":\"➕ +1 GB\",\"callback_data\":\"add1:%s\"},"
                  "{\"text\":\"➕ +5 GB\",\"callback_data\":\"add5:%s\"}]"
                  "]}",
                  d.blocked ? "🔓 فك الحظر" : "⛔ حظر",
                  d.blocked ? "unblk" : "blk", d.mac,
+                 d.mac,
+                 d.speed_unlocked ? "🔒 تطبيق تحديد السرعة" : "🚀 فتح السرعة الكاملة",
                  d.mac, d.mac, d.mac);
         telegram_send_message(chat_id, msg, kb);
     } else if (strncmp(data, "blk:", 4) == 0) {
@@ -716,6 +720,16 @@ static void handle_callback(const char *cb_id, const char *chat_id, const char *
             meter_set_device_gaming(data + 4, !cur);
             meter_save_all();
             telegram_send_message(chat_id, !cur ? "🎮 تم تفعيل VIP." : "تم إلغاء VIP.", NULL);
+        }
+    } else if (strncmp(data, "unlim:", 6) == 0) {
+        pthread_mutex_lock(&g_lock);
+        int idx = meter_find_by_mac(data + 6);
+        bool cur = (idx >= 0) ? g_devices[idx].speed_unlocked : false;
+        pthread_mutex_unlock(&g_lock);
+        if (idx >= 0) {
+            meter_set_device_speed_unlocked(data + 6, !cur);
+            meter_save_all();
+            telegram_send_message(chat_id, !cur ? "🚀 تم فتح السرعة الكاملة للجهاز دون تغيير القيم المحفوظة." : "🔒 تم إعادة تطبيق تحديد السرعة المحفوظ للجهاز.", NULL);
         }
     } else if (strncmp(data, "add1:", 5) == 0 || strncmp(data, "add5:", 5) == 0) {
         int gb = (data[3] == '1') ? 1 : 5;

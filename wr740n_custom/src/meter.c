@@ -171,9 +171,9 @@ void meter_load_all(void) {
             rmeter_device_t d;
             memset(&d, 0, sizeof(d));
             char *p = line;
-            char *fields[13] = {0};
+            char *fields[14] = {0};
             int nf = 0;
-            while (nf < 13) {
+            while (nf < 14) {
                 fields[nf++] = p;
                 char *sep = strchr(p, '|');
                 if (!sep) break;
@@ -195,6 +195,7 @@ void meter_load_all(void) {
             if (nf > 10) d.gaming_mode = (atoi(fields[10]) != 0);
             if (nf > 11) d.alert_flags = (uint16_t)atoi(fields[11]);
             if (nf > 12) snprintf(d.tg_chat_id, sizeof(d.tg_chat_id), "%s", fields[12]);
+            if (nf > 13) d.speed_unlocked = (atoi(fields[13]) != 0);
             g_devices[g_device_count++] = d;
         }
         fclose(fp);
@@ -239,7 +240,7 @@ void meter_save_all(void) {
     if (fp) {
         for (int i = 0; i < g_device_count; i++) {
             rmeter_device_t *d = &g_devices[i];
-            fprintf(fp, "%s|%s|%s|%llu|%llu|%llu|%u|%u|%d|%d|%d|%u|%s\n",
+            fprintf(fp, "%s|%s|%s|%llu|%llu|%llu|%u|%u|%d|%d|%d|%u|%s|%d\n",
                     d->mac, d->bound_ip, d->name,
                     (unsigned long long)d->up_bytes,
                     (unsigned long long)d->down_bytes,
@@ -250,7 +251,8 @@ void meter_save_all(void) {
                     d->auto_blocked ? 1 : 0,
                     d->gaming_mode ? 1 : 0,
                     (unsigned)d->alert_flags,
-                    d->tg_chat_id);
+                    d->tg_chat_id,
+                    d->speed_unlocked ? 1 : 0);
         }
         fclose(fp);
         rename(tmp_db, RMETER_STATE_FLASH);
@@ -516,7 +518,7 @@ void meter_write_ram_json(void) {
                     "\"up_bytes\":%llu,\"down_bytes\":%llu,\"quota_bytes\":%llu,"
                     "\"cap_up_kbps\":%u,\"cap_down_kbps\":%u,"
                     "\"cur_up_bps\":%u,\"cur_down_bps\":%u,"
-                    "\"online\":%s,\"blocked\":%s,\"auto_blocked\":%s,\"gaming_mode\":%s,\"is_wifi\":%s,"
+                    "\"online\":%s,\"blocked\":%s,\"auto_blocked\":%s,\"gaming_mode\":%s,\"speed_unlocked\":%s,\"is_wifi\":%s,"
                     "\"connected_s\":%lld,\"tg_chat_id\":\"%s\",\"last_seen\":%lld}%s\n",
                     d->mac, d->ip, d->bound_ip, esc_name,
                     (unsigned long long)su, (unsigned long long)sd, (unsigned long long)d->quota_bytes,
@@ -526,6 +528,7 @@ void meter_write_ram_json(void) {
                     d->blocked ? "true" : "false",
                     d->auto_blocked ? "true" : "false",
                     d->gaming_mode ? "true" : "false",
+                    d->speed_unlocked ? "true" : "false",
                     d->is_wifi ? "true" : "false",
                     conn_s, esc_chat, (long long)d->last_seen,
                     (i + 1 < g_device_count) ? "," : "");
@@ -605,8 +608,22 @@ bool meter_set_device_speed_cap(const char *mac, uint32_t up_kbps, uint32_t down
     pthread_mutex_lock(&g_lock);
     int idx = meter_find_by_mac_or_ip(mac);
     if (idx < 0) { pthread_mutex_unlock(&g_lock); return false; }
-    g_devices[idx].cap_up_kbps = up_kbps;
-    g_devices[idx].cap_down_kbps = down_kbps;
+    if (g_devices[idx].cap_up_kbps != up_kbps || g_devices[idx].cap_down_kbps != down_kbps) {
+        g_devices[idx].cap_up_kbps = up_kbps;
+        g_devices[idx].cap_down_kbps = down_kbps;
+        g_devices[idx].speed_unlocked = false;
+        g_tc_dirty = true;
+        g_flash_dirty = true;
+    }
+    pthread_mutex_unlock(&g_lock);
+    return true;
+}
+
+bool meter_set_device_speed_unlocked(const char *mac, bool unlocked) {
+    pthread_mutex_lock(&g_lock);
+    int idx = meter_find_by_mac_or_ip(mac);
+    if (idx < 0) { pthread_mutex_unlock(&g_lock); return false; }
+    g_devices[idx].speed_unlocked = unlocked;
     g_tc_dirty = true;
     g_flash_dirty = true;
     pthread_mutex_unlock(&g_lock);

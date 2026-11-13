@@ -40,6 +40,7 @@ typedef struct {
     bool blocked;              /* manual block or quota-100% auto-block */
     bool auto_blocked;         /* blocked specifically due to 100% quota */
     bool gaming_mode;          /* VIP DSCP EF + HTB prio 1 */
+    bool speed_unlocked;       /* bypass cap_up/cap_down while preserving saved values */
 
     uint16_t alert_flags;      /* bitmask of sent threshold alerts */
     time_t last_seen;

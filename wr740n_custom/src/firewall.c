@@ -224,7 +224,7 @@ static void apply_dir_htb(rmeter_device_t *devs, int count, const char *ifname,
 
     for (int i = 0; i < count; i++) {
         if (devs[i].blocked || !ip_valid(devs[i].ip)) continue;
-        uint32_t cap = is_dl ? devs[i].cap_down_kbps : devs[i].cap_up_kbps;
+        uint32_t cap = devs[i].speed_unlocked ? 0 : (is_dl ? devs[i].cap_down_kbps : devs[i].cap_up_kbps);
         if (cap == 0 && !devs[i].gaming_mode) continue;
 
         unsigned int cid = 0x10U + (unsigned int)i;
@@ -265,8 +265,8 @@ void fw_apply_tc(rmeter_device_t *devs, int count, const char *lan_if, const cha
     bool any_ul_qos = false;
     for (int i = 0; i < count; i++) {
         if (!devs[i].blocked && ip_valid(devs[i].ip)) {
-            if (devs[i].cap_down_kbps > 0 || devs[i].gaming_mode) any_dl_qos = true;
-            if (devs[i].cap_up_kbps > 0 || devs[i].gaming_mode) any_ul_qos = true;
+            if ((!devs[i].speed_unlocked && devs[i].cap_down_kbps > 0) || devs[i].gaming_mode) any_dl_qos = true;
+            if ((!devs[i].speed_unlocked && devs[i].cap_up_kbps > 0) || devs[i].gaming_mode) any_ul_qos = true;
         }
     }
 

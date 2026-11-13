@@ -36,6 +36,7 @@ bool meter_set_device_gaming(const char *mac, bool gaming);
 bool meter_set_device_quota(const char *mac, uint64_t quota_bytes);
 bool meter_add_device_quota(const char *mac, int64_t add_bytes);
 bool meter_set_device_speed_cap(const char *mac, uint32_t up_kbps, uint32_t down_kbps);
+bool meter_set_device_speed_unlocked(const char *mac, bool unlocked);
 bool meter_set_device_name(const char *mac, const char *name);
 bool meter_set_device_binding(const char *mac, const char *bound_ip);
 bool meter_set_device_telegram(const char *mac, const char *chat_id);
