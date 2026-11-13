@@ -47,6 +47,12 @@ static void test_json_util(void) {
     char esc[64];
     json_escape("a\"b\\c\nd", esc, sizeof(esc));
     assert(strcmp(esc, "a\\\"b\\\\c\\nd") == 0);
+
+    /* Telegram getUpdates JSON escaped Arabic + UTF-16 surrogate pair emoji */
+    const char *tg_j = "{\"text\":\"\\ud83d\\udcca \\u0627\\u0633\\u062a\\u0647\\u0644\\u0627\\u0643 \\u0627\\u0644\\u0628\\u0627\\u0642\\u0629\"}";
+    char tg_out[128] = {0};
+    assert(json_get_str(tg_j, "text", tg_out, sizeof(tg_out)));
+    assert(strcmp(tg_out, "📊 استهلاك الباقة") == 0);
     printf("[PASS] test_json_util\n");
 }
 
@@ -116,9 +122,82 @@ static void test_meter_scaling_and_quota(void) {
     printf("[PASS] test_meter_scaling_and_quota\n");
 }
 
+static void test_alert_templates_and_flags(void) {
+    memset(&g_config, 0, sizeof(g_config));
+    g_config.gb_standard = 1024;
+    g_config.observer_mode_enabled = true;
+    g_config.ota_auto_check_enabled = false;
+    meter_set_tg_alert_msg(0, "تنبيه {name} ({ip}): وصلت {pct}\nالمستخدم: {used} من {quota}\nالمتبقي: {rem}");
+    meter_set_tg_alert_msg(4, "انتهت باقة {name} تماماً ({pct})!");
+    assert(strcmp(g_config.tg_alert_msgs[4], "انتهت باقة {name} تماماً ({pct})!") == 0);
+
+    char out[512] = {0};
+    meter_format_alert_template(g_config.tg_alert_msgs[0], "Laptop", "192.168.1.10", 50,
+                                "5.00 GB", "10.00 GB", "5.00 GB", out, sizeof(out));
+    assert(strstr(out, "Laptop (192.168.1.10): وصلت 50%") != NULL);
+    assert(strstr(out, "المستخدم: 5.00 GB من 10.00 GB") != NULL);
+    assert(strstr(out, "المتبقي: 5.00 GB") != NULL);
+
+    /* Empty template cleanly returns empty output */
+    meter_format_alert_template("", "Laptop", "192.168.1.10", 50,
+                                "5.00 GB", "10.00 GB", "5.00 GB", out, sizeof(out));
+    assert(out[0] == '\0');
+
+    char bfmt[32] = {0};
+    meter_fmt_bytes_short(512ULL * 1024ULL * 1024ULL, bfmt, sizeof(bfmt));
+    assert(strstr(bfmt, "512.0 MB") != NULL);
+    printf("[PASS] test_alert_templates_and_flags\n");
+}
+
+#include <pthread.h>
+
+static volatile int s_concurrent_run = 1;
+static void *concurrent_lock_mutator(void *arg) {
+    (void)arg;
+    for (int i = 0; i < 400 && s_concurrent_run; i++) {
+        pthread_mutex_lock(&g_lock);
+        g_devices[0].down_bytes += 1024ULL;
+        g_flash_dirty = true;
+        pthread_mutex_unlock(&g_lock);
+    }
+    return NULL;
+}
+
+static void test_meter_save_all_snapshot_concurrent(void) {
+    pthread_mutex_lock(&g_lock);
+    g_device_count = 1;
+    memset(&g_devices[0], 0, sizeof(g_devices[0]));
+    snprintf(g_devices[0].mac, sizeof(g_devices[0].mac), "AA:BB:CC:11:22:33");
+    g_devices[0].down_bytes = 0;
+    g_flash_dirty = true;
+    pthread_mutex_unlock(&g_lock);
+
+    s_concurrent_run = 1;
+    pthread_t th;
+    assert(pthread_create(&th, NULL, concurrent_lock_mutator, NULL) == 0);
+    for (int i = 0; i < 40; i++) {
+        meter_save_all();
+    }
+    s_concurrent_run = 0;
+    pthread_join(th, NULL);
+
+    pthread_mutex_lock(&g_lock);
+    g_flash_dirty = true;
+    pthread_mutex_unlock(&g_lock);
+    meter_save_all();
+
+    pthread_mutex_lock(&g_lock);
+    assert(g_flash_dirty == false);
+    assert(strcmp(g_devices[0].mac, "AA:BB:CC:11:22:33") == 0);
+    pthread_mutex_unlock(&g_lock);
+    printf("[PASS] test_meter_save_all_snapshot_concurrent\n");
+}
+
 int main(void) {
     test_json_util();
     test_meter_scaling_and_quota();
+    test_alert_templates_and_flags();
+    test_meter_save_all_snapshot_concurrent();
     printf("ALL UNIT TESTS PASSED\n");
     return 0;
 }

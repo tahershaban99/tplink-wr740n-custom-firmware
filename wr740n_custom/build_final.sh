@@ -12,6 +12,17 @@ gcc -O2 -Wall -Wextra -std=gnu99 -I"$PROJ/src" \
   -lpthread -o /tmp/test_unit
 /tmp/test_unit
 
+gcc -O2 -Wall -Wextra -std=gnu99 -I"$PROJ/src" \
+  "$PROJ/tests/test_telegram.c" "$PROJ/src/meter.c" "$PROJ/src/json_util.c" \
+  -lpthread -o /tmp/test_telegram
+/tmp/test_telegram
+
+gcc -O2 -Wall -Wextra -std=gnu99 -I"$PROJ/src" \
+  -Wl,--wrap=system -Wl,--wrap=popen -Wl,--wrap=pclose -Wl,--wrap=fopen \
+  "$PROJ/tests/test_meter_fw.c" "$PROJ/src/firewall.c" "$PROJ/src/meter.c" "$PROJ/src/json_util.c" \
+  -lpthread -o /tmp/test_meter_fw
+/tmp/test_meter_fw
+
 echo "=== 2. Checking Web UI index.html ==="
 python3 - <<'PY'
 import html.parser, re

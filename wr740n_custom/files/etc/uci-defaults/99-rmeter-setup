@@ -7,8 +7,9 @@ if [ -f /etc/config/uhttpd ]; then
     uci set uhttpd.main.index_page='index.html'
     uci set uhttpd.main.error_page='/index.html'
     uci set uhttpd.main.cgi_prefix='/cgi-bin'
-    uci set uhttpd.main.script_timeout='120'
-    uci set uhttpd.main.network_timeout='60'
+    uci set uhttpd.main.max_requests='10'
+    uci set uhttpd.main.script_timeout='180'
+    uci set uhttpd.main.network_timeout='120'
     uci commit uhttpd
 fi
 
@@ -48,7 +49,10 @@ if uci -q get wireless.radio0 >/dev/null 2>&1; then
     uci commit wireless 2>/dev/null
 fi
 
-chmod +x /etc/init.d/rmeterd /usr/sbin/rmeterd /www/cgi-bin/api 2>/dev/null
+for f in /etc/init.d/rmeterd /usr/sbin/rmeterd /www/cgi-bin/api; do
+    [ -x "$f" ] || chmod +x "$f" 2>/dev/null
+done
+rm -f /etc/rmeter/*.tmp 2>/dev/null
 /etc/init.d/rmeterd enable 2>/dev/null
 
 exit 0

@@ -44,5 +44,12 @@ bool meter_reset_device_usage(const char *mac);
 bool meter_delete_device(const char *mac);
 void meter_reset_all_usage(void);
 
+void meter_set_tg_alert_msg(int slot, const char *msg);
+void meter_format_alert_template(const char *tmpl, const char *name, const char *ip,
+                                 unsigned pct, const char *used_str,
+                                 const char *quota_str, const char *rem_str,
+                                 char *out, size_t out_sz);
+void meter_fmt_bytes_short(uint64_t b, char *out, size_t sz);
+
 #endif /* METER_H */
 

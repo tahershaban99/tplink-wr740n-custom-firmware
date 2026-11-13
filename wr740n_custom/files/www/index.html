@@ -145,6 +145,24 @@ canvas{width:100%;height:190px;display:block;border-radius:10px;background:var(-
 .banner{background:linear-gradient(90deg,#b91c1c,#f59e0b);color:#fff;padding:9px 14px;border-radius:10px;margin-bottom:12px;font-weight:700;text-align:center;display:none}
 .login-box{max-width:370px;margin:10vh auto;background:var(--glass);border:1px solid var(--brd);border-radius:18px;padding:24px;box-shadow:var(--sh);text-align:center}
 .hide{display:none!important}
+.g3{grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+.zoom-cap{gap:4px;padding:3px 7px}.zoom-cap .btn{padding:1px 7px;min-width:24px;font-weight:800}
+.topo{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 16px}
+.topo-node{flex:1;min-width:130px;text-align:center;background:var(--card);border:1px solid var(--brd);border-radius:12px;padding:10px}
+.topo-pipe{flex:1;min-width:40px;height:4px;border-radius:99px;background:var(--brd);position:relative;overflow:hidden}
+.topo-pipe.on{background:linear-gradient(90deg,var(--ok),var(--acc));box-shadow:0 0 10px rgba(56,189,248,.45)}
+.ring-box{position:relative;width:116px;height:116px;margin:4px auto}
+.ring-svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:rgba(255,255,255,.08);stroke-width:10}
+[data-theme="light"] .ring-bg{stroke:rgba(15,23,42,.1)}
+.ring-fg{fill:none;stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .4s}
+.ring-lbl{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.pred-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;font-size:12px;font-weight:700;margin-top:8px}
+.pred-pill.ok{background:rgba(16,185,129,.16);color:#34d399;border:1px solid rgba(16,185,129,.35)}
+.pred-pill.warn{background:rgba(245,158,11,.16);color:#fbbf24;border:1px solid rgba(245,158,11,.35)}
+.alert-card{background:var(--card);border:1px solid var(--brd);border-radius:11px;padding:10px;margin-bottom:9px}
+.alert-card textarea{width:100%;min-height:62px;resize:vertical;font-size:12.5px;line-height:1.5;margin-top:5px}
+.var-chip{cursor:pointer;font-size:11px;padding:3px 8px;border-radius:7px;background:rgba(56,189,248,.14);border:1px solid rgba(56,189,248,.35);color:var(--acc);font-family:monospace}
 </style>
 </head>
 <body>
@@ -172,23 +190,110 @@ canvas{width:100%;height:190px;display:block;border-radius:10px;background:var(-
     </div>
     <div class="hdr-ctrl">
       <span class="pill"><span id="connDot" class="dot"></span><span id="connTxt">متصل</span></span>
+      <div class="pill zoom-cap" title="تكبير أو تصغير حجم الواجهة">
+        <button class="btn sm" type="button" onclick="chgZoom(-5)">-</button>
+        <span id="zoomLbl" style="cursor:pointer;font-size:11.5px;font-weight:700" onclick="setZoom(100)">100%</span>
+        <button class="btn sm" type="button" onclick="chgZoom(5)">+</button>
+      </div>
       <select id="themeSel" style="width:auto;padding:5px 9px;font-size:12px">
         <option value="">قرمزي داكن</option>
         <option value="sunset">غروب كوني</option>
         <option value="cyber">سايبر ماتريكس</option>
         <option value="light">نهاري زجاجي</option>
       </select>
-      <button class="btn sm err" onclick="doLogout()">خروج</button>
+      <button id="authBtn" class="btn sm err" onclick="handleAuthClick()">خروج</button>
     </div>
   </header>
 
   <nav class="tabs" id="navTabs">
+    <button class="tab" data-t="ov">📊 نظرة عامة</button>
     <button class="tab active" data-t="dash">لوحة التحكم والأجهزة</button>
     <button class="tab" data-t="quota">الباقة والمعايرة</button>
     <button class="tab" data-t="net">الوايفاي والإنترنت</button>
     <button class="tab" data-t="tg">بوت تليجرام</button>
     <button class="tab" data-t="sys">المراقبة والتحديث OTA</button>
   </nav>
+
+  <!-- TAB 0: OVERVIEW ANALYTICS -->
+  <section id="tab-ov" class="panel">
+    <div class="card topo" style="margin-bottom:12px">
+      <div class="topo-node">
+        <div style="font-size:20px">🌐</div>
+        <b id="ovWanIf">WAN</b>
+        <div style="font-size:11.5px;color:var(--muted)" id="ovWanState">متصل</div>
+      </div>
+      <div class="topo-pipe" id="ovPipe1"></div>
+      <div class="topo-node" style="border-color:var(--pri2)">
+        <div style="font-size:20px">📡</div>
+        <b>RouterMeter OS</b>
+        <div style="font-size:11.5px;color:var(--muted)">WR740N v4 • <span id="ovClock">-</span></div>
+      </div>
+      <div class="topo-pipe" id="ovPipe2"></div>
+      <div class="topo-node">
+        <div style="font-size:20px">👥</div>
+        <b id="ovLanCnt">0 متصل</b>
+        <div style="font-size:11.5px;color:var(--muted)" id="ovWifiInfo">Wi-Fi • 2.4GHz</div>
+      </div>
+    </div>
+
+    <div class="grid g3">
+      <div class="card">
+        <div class="sec-h"><h2>🧠 موارد الراوتر والوايفاي</h2></div>
+        <div class="stat-lbl">الرام المتاحة: <b id="ovRamTxt">-</b></div>
+        <div class="bar ok" id="ovRamBar"><i style="width:0%"></i></div>
+        <div class="stat-lbl" style="margin-top:12px">الأجهزة النشطة: <b id="ovCliTxt">0 / 0</b></div>
+        <div class="bar" id="ovCliBar"><i style="width:0%"></i></div>
+        <div class="stat-sub" style="margin-top:10px">شبكة الوايفاي: <b id="ovSsidTxt">-</b> (<span id="ovChTxt">CH auto</span>)</div>
+        <div class="acts" style="margin-top:14px">
+          <button class="btn sm pri" onclick="goTab('dash')">👥 إدارة الأجهزة</button>
+          <button class="btn sm ok" onclick="goTab('sys')">🚀 OTA والنظام</button>
+          <button class="btn sm warn" onclick="goTab('tg')">🤖 تليجرام</button>
+        </div>
+      </div>
+
+      <div class="card" style="text-align:center">
+        <div class="sec-h" style="justify-content:center"><h2>🎯 تحليل الباقة والتنبؤ</h2></div>
+        <div class="ring-box">
+          <svg class="ring-svg" viewBox="0 0 120 120">
+            <circle class="ring-bg" cx="60" cy="60" r="50"></circle>
+            <circle class="ring-fg" id="ovQuotaRing" cx="60" cy="60" r="50" stroke="var(--acc)" stroke-dasharray="314" stroke-dashoffset="314"></circle>
+          </svg>
+          <div class="ring-lbl">
+            <b id="ovQuotaPct" style="font-size:18px">0%</b>
+            <small style="font-size:10.5px;color:var(--muted)">مستهلك</small>
+          </div>
+        </div>
+        <div style="font-size:12.5px;margin-top:6px">المتبقي: <b id="ovQuotaRem">-</b> • المتبقي بالدورة: <b id="ovRemDays">-</b> يوم</div>
+        <div style="font-size:12.5px;color:var(--muted);margin-top:4px">المعدل اليومي الآمن: <b id="ovSafeRate" style="color:var(--ok)">-</b></div>
+        <div id="ovPredPill" class="pred-pill ok">⏳ جاري التحليل...</div>
+      </div>
+
+      <div class="card">
+        <div class="sec-h"><h2>⚡ السرعة اللحظية</h2><span style="font-size:11.5px;color:var(--muted)">الذروة: <b id="ovPeakTxt">-</b></span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:center;margin-bottom:8px">
+          <div>
+            <div class="ring-box" style="width:88px;height:88px">
+              <svg class="ring-svg" viewBox="0 0 120 120">
+                <circle class="ring-bg" cx="60" cy="60" r="50"></circle>
+                <circle class="ring-fg" id="ovDnRing" cx="60" cy="60" r="50" stroke="#34d399" stroke-dasharray="314" stroke-dashoffset="314"></circle>
+              </svg>
+              <div class="ring-lbl"><b id="ovDnVal" style="font-size:12px">0</b><small style="font-size:9.5px;color:var(--muted)">⬇️ تنزيل</small></div>
+            </div>
+          </div>
+          <div>
+            <div class="ring-box" style="width:88px;height:88px">
+              <svg class="ring-svg" viewBox="0 0 120 120">
+                <circle class="ring-bg" cx="60" cy="60" r="50"></circle>
+                <circle class="ring-fg" id="ovUpRing" cx="60" cy="60" r="50" stroke="#fb7185" stroke-dasharray="314" stroke-dashoffset="314"></circle>
+              </svg>
+              <div class="ring-lbl"><b id="ovUpVal" style="font-size:12px">0</b><small style="font-size:9.5px;color:var(--muted)">⬆️ رفع</small></div>
+            </div>
+          </div>
+        </div>
+        <canvas id="ovChart" width="420" height="90" style="height:90px"></canvas>
+      </div>
+    </div>
+  </section>
 
   <!-- TAB 1: DASHBOARD -->
   <section id="tab-dash" class="panel active">
@@ -274,6 +379,7 @@ canvas{width:100%;height:190px;display:block;border-radius:10px;background:var(-
         </div>
       </div>
     </div>
+    <datalist id="tgUsersDL"></datalist>
   </section>
 
   <!-- TAB 2: QUOTA & SCALE -->
@@ -288,8 +394,8 @@ canvas{width:100%;height:190px;display:block;border-radius:10px;background:var(-
         </div>
         <div class="fg"><label>مدة الدورة (أيام)</label><input class="inp" id="qDays" type="number" min="1" max="365"></div>
         <div class="grid g2">
-          <div class="fg"><label>أقصى سرعة تحميل للإنترنت Mbps (لأولوية VIP، 0 = 100)</label><input class="inp" id="qWanD" type="number" step="0.5" min="0"></div>
-          <div class="fg"><label>أقصى سرعة رفع Mbps (لأولوية VIP، 0 = 100)</label><input class="inp" id="qWanU" type="number" step="0.5" min="0"></div>
+          <div class="fg"><label>محدد سرعة التحميل الكلي للإنترنت Mbps (0 = مفتوح / 100 لـ VIP)</label><input class="inp" id="qWanD" type="number" step="0.5" min="0"></div>
+          <div class="fg"><label>محدد سرعة الرفع الكلي Mbps (0 = مفتوح / 100 لـ VIP)</label><input class="inp" id="qWanU" type="number" step="0.5" min="0"></div>
         </div>
         <button class="btn pri" onclick="saveMainQuota()">حفظ إعدادات الباقة</button>
       </div>
@@ -395,22 +501,53 @@ canvas{width:100%;height:190px;display:block;border-radius:10px;background:var(-
         </div>
       </div>
     </div>
+    <div class="card" style="margin-top:12px">
+      <div class="sec-h">
+        <h2>🔔 تخصيص رسائل الإشعارات حسب النسبة المئوية</h2>
+        <div class="acts">
+          <button class="btn sm warn" type="button" onclick="resetTgAlerts()">مسح القوالب (الافتراضي)</button>
+          <button class="btn sm pri" type="button" onclick="saveTgAlerts()">💾 حفظ قوالب الإشعارات</button>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px">يمكنك تعديل رسالة كل نسبة مئوية تصل للمستخدمين والمشرفين. اضغط على أي متغير لإدراجه، أو اترك أي خانة فارغة لاستخدام النص الافتراضي:</p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+        <button type="button" class="var-chip" onclick="insAlertVar('{name}')">{name} اسم الجهاز</button>
+        <button type="button" class="var-chip" onclick="insAlertVar('{ip}')">{ip} الآيبي</button>
+        <button type="button" class="var-chip" onclick="insAlertVar('{pct}')">{pct} النسبة</button>
+        <button type="button" class="var-chip" onclick="insAlertVar('{used}')">{used} المستهلك</button>
+        <button type="button" class="var-chip" onclick="insAlertVar('{quota}')">{quota} الباقة</button>
+        <button type="button" class="var-chip" onclick="insAlertVar('{rem}')">{rem} المتبقي</button>
+      </div>
+      <div id="tgAlertEditors" class="grid g2"></div>
+    </div>
   </section>
 
   <!-- TAB 5: MONITORING, AUTO-REBOOT, OTA & PASSWORD -->
   <section id="tab-sys" class="panel">
     <div class="grid g2">
       <div class="card">
-        <div class="sec-h"><h2>المراقبة وإعادة التشغيل التلقائي</h2></div>
+        <div class="sec-h"><h2>المراقبة وإعادة التشغيل التلقائي</h2><span class="pill" id="sysClock" style="font-size:11.5px">الوقت: -</span></div>
+        <label class="chk"><input type="checkbox" id="obsMode"> تفعيل وضع المراقبة (السماح بعرض الحالة بدون تسجيل دخول)</label>
         <label class="chk"><input type="checkbox" id="rbEn"> تفعيل إعادة التشغيل اليومي التلقائي</label>
         <div class="grid g4" style="grid-template-columns:1fr 1fr 1fr">
           <div class="fg"><label>الساعة (0-23)</label><input class="inp" id="rbHr" type="number" min="0" max="23"></div>
           <div class="fg"><label>الدقيقة (0-59)</label><input class="inp" id="rbMn" type="number" min="0" max="59"></div>
-          <div class="fg"><label>المنطقة (UTC)</label><input class="inp" id="rbTz" type="number" min="-12" max="14"></div>
+          <div class="fg"><label>المنطقة (UTC)</label>
+            <div style="display:flex;gap:4px"><input class="inp" id="rbTz" type="number" min="-12" max="14"><button class="btn sm" type="button" title="كشف المنطقة من المتصفح" onclick="autoTz()">📍</button></div>
+          </div>
         </div>
-        <div class="acts">
+        <div class="acts" style="margin-bottom:10px">
           <button class="btn pri" onclick="saveAutoReboot()">حفظ الجدول</button>
+          <button class="btn sm ok" type="button" onclick="syncNtp()">🕒 مزامنة الوقت NTP</button>
+          <button class="btn sm warn" type="button" onclick="saveSysOpts()">💾 حفظ وضع المراقبة</button>
           <button class="btn err" onclick="rebootNow()">إعادة تشغيل فورية (3ث)</button>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px">
+          <span style="font-size:12px;color:var(--muted)">أعد التشغيل بعد:</span>
+          <input class="inp" id="rbCdMin" type="number" min="1" max="1440" value="30" style="width:74px">
+          <span style="font-size:12px;color:var(--muted)">دقيقة</span>
+          <button class="btn sm warn" type="button" onclick="rebootCountdownMin()">⏳ بدء المؤقت</button>
+          <button class="btn sm" type="button" onclick="cancelRebootTimer()">❌ إلغاء</button>
         </div>
         <hr style="border:none;border-top:1px solid var(--brd);margin:16px 0">
         <h3 style="font-size:14px;margin-bottom:10px">تغيير بيانات الدخول</h3>
@@ -430,6 +567,7 @@ canvas{width:100%;height:190px;display:block;border-radius:10px;background:var(-
             <button class="btn sm" onclick="saveOtaUrl()">حفظ</button>
           </div>
         </div>
+        <label class="chk"><input type="checkbox" id="otaAutoChk" onchange="saveSysOpts()"> فحص تلقائي للتحديثات كل 6 ساعات مع إشعار تليجرام</label>
         <div class="acts" style="margin-bottom:12px">
           <button class="btn pri" onclick="checkOta()">فحص التحديثات الآن</button>
         </div>
@@ -452,11 +590,25 @@ canvas{width:100%;height:190px;display:block;border-radius:10px;background:var(-
 </div>
 
 <div id="toast" class="toast"></div>
+<div id="loginModal" class="modal-bg" onclick="if(event.target===this)closeLoginModal()">
+  <div class="modal" style="max-width:360px">
+    <div class="sec-h"><h2>🔒 دخول المشرف</h2><button class="btn sm" onclick="closeLoginModal()">✕</button></div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px">هذا الإجراء يتطلب صلاحيات المشرف.</p>
+    <form id="modalLoginForm">
+      <div class="fg"><label>اسم المستخدم</label><input class="inp" id="mUser" value="admin" required></div>
+      <div class="fg"><label>كلمة المرور</label><input class="inp" id="mPass" type="password" value="admin" required></div>
+      <div id="mLoginErr" style="color:#f87171;font-size:12px;margin-bottom:8px"></div>
+      <button class="btn pri" style="width:100%" type="submit">تأكيد الدخول</button>
+    </form>
+  </div>
+</div>
 
 <script>
 let S = null, TG_USERS = [], tableMode = true, showOffline = localStorage.getItem('rm_show_offline')==='1', peakD = 0, peakU = 0;
 let dirtyMap = {}, openPin = {};
 let histD = new Array(60).fill(0), histU = new Array(60).fill(0), formInit = false;
+let isAdmin = false, observerMode = false, alertsInit = false, lastAlertEl = null, pollTimer = null, pollSeq = 0;
+let curZoom = parseInt(localStorage.getItem('rm_zoom'), 10) || 100;
 
 const $ = id => document.getElementById(id);
 function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',3200);}
@@ -495,15 +647,53 @@ function connSubTxt(d){
 }
 function gbUnit(){return (S&&S.gb_standard===1000)?1e9:1073741824;}
 
+function setZoom(z){
+  curZoom = Math.min(130, Math.max(70, Math.round(z)));
+  localStorage.setItem('rm_zoom', String(curZoom));
+  document.documentElement.style.zoom = (curZoom / 100);
+  if($('zoomLbl')) $('zoomLbl').textContent = curZoom + '%';
+}
+function chgZoom(d){ setZoom(curZoom + d); }
+setZoom(curZoom);
+
+function goTab(t){
+  const btn = document.querySelector('#navTabs .tab[data-t="'+t+'"]');
+  if(btn) btn.click();
+}
+function updateAuthBtn(){
+  const b = $('authBtn'); if(!b) return;
+  if(isAdmin){
+    b.textContent = 'خروج'; b.className = 'btn sm err';
+  } else if(observerMode){
+    b.textContent = '👁️ وضع المراقبة (دخول المشرف)'; b.className = 'btn sm warn';
+  } else {
+    b.textContent = 'دخول المشرف'; b.className = 'btn sm pri';
+  }
+}
+function openLoginModal(){
+  $('mLoginErr').textContent = '';
+  $('loginModal').classList.add('show');
+  setTimeout(()=>$('mPass').focus(), 50);
+}
+function closeLoginModal(){ $('loginModal').classList.remove('show'); }
+function handleAuthClick(){ if(isAdmin) doLogout(); else openLoginModal(); }
+function stopPoll(){ if(pollTimer){ clearInterval(pollTimer); pollTimer = null; } }
+function startPoll(){ if(!pollTimer) pollTimer = setInterval(poll, 1000); }
+
 async function api(act, body){
   const opt = body!==undefined ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {method:'GET'};
   const r = await fetch('/cgi-bin/api?action='+encodeURIComponent(act), opt);
-  if(r.status===401){showLogin();throw new Error('401');}
+  if(r.status===401){
+    isAdmin = false; updateAuthBtn();
+    if(observerMode && act !== 'state'){ openLoginModal(); toast('هذا الإجراء يتطلب دخول المشرف'); }
+    else showLogin();
+    throw new Error('401');
+  }
   return r.json();
 }
 
 function showLogin(){$('loginView').classList.remove('hide');$('appView').classList.add('hide');}
-function showApp(){$('loginView').classList.add('hide');$('appView').classList.remove('hide');}
+function showApp(){$('loginView').classList.add('hide');$('appView').classList.remove('hide');updateAuthBtn();}
 
 $('themeSel').onchange = function(){
   document.documentElement.setAttribute('data-theme', this.value);
@@ -520,27 +710,51 @@ document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
   b.classList.add('active');
   $('tab-'+b.dataset.t).classList.add('active');
-  if(b.dataset.t==='net') loadNetInfo();
+  if(b.dataset.t==='net' && isAdmin) loadNetInfo();
+  if(b.dataset.t==='ov') drawCanvasChart('ovChart');
 });
 
-$('loginForm').onsubmit = async e=>{
-  e.preventDefault();
-  $('loginErr').textContent='';
+async function submitLoginForm(user, pass, errEl, onOk){
+  errEl.textContent = '';
   try{
-    const res = await api('login',{username:$('lUser').value,password:$('lPass').value});
-    if(res.ok){showApp();formInit=false;poll();loadNetInfo();}
-    else $('loginErr').textContent=res.error||'خطأ في الدخول';
-  }catch(ex){$('loginErr').textContent='تعذر الاتصال بالراوتر';}
+    const res = await fetch('/cgi-bin/api?action=login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username:user, password:pass})
+    }).then(r=>r.json());
+    if(res.ok){
+      isAdmin = true; formInit = false; alertsInit = false;
+      onOk();
+      await poll(); startPoll(); loadNetInfo();
+    } else errEl.textContent = res.error || 'خطأ في الدخول';
+  }catch(ex){ errEl.textContent = 'تعذر الاتصال بالراوتر'; }
+}
+
+$('loginForm').onsubmit = e => {
+  e.preventDefault();
+  submitLoginForm($('lUser').value, $('lPass').value, $('loginErr'), ()=>{ showApp(); });
+};
+$('modalLoginForm').onsubmit = e => {
+  e.preventDefault();
+  submitLoginForm($('mUser').value, $('mPass').value, $('mLoginErr'), ()=>{ closeLoginModal(); showApp(); toast('تم تسجيل دخول المشرف'); });
 };
 
-async function doLogout(){await api('logout',{});showLogin();}
+async function doLogout(){
+  try{ await fetch('/cgi-bin/api?action=logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); }catch(e){}
+  isAdmin = false; formInit = false; alertsInit = false; updateAuthBtn();
+  if(observerMode){ await poll(); toast('تم الخروج إلى وضع المراقبة'); }
+  else showLogin();
+}
 
 async function poll(){
+  const seq = ++pollSeq;
   try{
     const res = await api('state');
-    if(!res.ok)return;
+    if(!res.ok || seq < pollSeq)return;
     S = res.state||{};
+    if(res.authenticated !== undefined) isAdmin = !!res.authenticated;
+    observerMode = !!S.observer_mode;
     TG_USERS = res.tg_users||[];
+    updateAuthBtn();
     $('connDot').classList.remove('off');$('connTxt').textContent='متصل';
     render();
   }catch(e){
@@ -579,10 +793,13 @@ function render(){
   const onlineCnt=S.devices.filter(d=>d.online).length;
   $('sOnline').textContent=onlineCnt;$('sTotalDev').textContent=S.devices.length;
   $('sRam').textContent=S.ram_free_kb?((S.ram_free_kb/1024).toFixed(1)+' / '+(S.ram_total_kb/1024).toFixed(1)+' MB'):'-';
+  if($('sysClock')) $('sysClock').textContent='الوقت: '+(S.router_time||'-')+(S.time_synced?'':' (غير متزامن)');
+  if($('ovClock')) $('ovClock').textContent=S.router_time||'-';
 
   histD.push(td);if(histD.length>60)histD.shift();
   histU.push(tu);if(histU.length>60)histU.shift();
-  drawChart();
+  drawCanvasChart('spdChart');
+  updateOverview(td, tu, used, mq, onlineCnt);
 
   if(!formInit){
     formInit=true;
@@ -594,16 +811,20 @@ function render(){
     $('qWanU').value=S.wan_up_kbps?(S.wan_up_kbps/1000):0;
     $('tgEn').checked=!!S.tg_enabled;$('tgInter').checked=!!S.tg_interactive;
     $('tgTok').value=S.tg_token||'';$('tgIds').value=S.tg_admin_ids||'';$('tgThr').value=S.tg_thresholds||'50,75,90,95,100';
+    $('obsMode').checked=!!S.observer_mode;
+    $('otaAutoChk').checked=S.ota_auto_check!==false;
     $('rbEn').checked=!!S.auto_reboot_enabled;$('rbHr').value=S.auto_reboot_hour??4;$('rbMn').value=S.auto_reboot_min??0;$('rbTz').value=S.auto_reboot_tz??2;
     $('otaVerUrl').value=S.ota_version_url||'';
   }
+  if(!alertsInit){alertsInit=true; buildAlertEditors(false);}
 
   renderDevices();
   renderTgUsers();
 }
 
-function drawChart(){
-  const c=$('spdChart'), ctx=c.getContext('2d'), w=c.width, h=c.height;
+function drawCanvasChart(cid){
+  const c=$(cid); if(!c)return;
+  const ctx=c.getContext('2d'), w=c.width, h=c.height;
   ctx.clearRect(0,0,w,h);
   const mx=Math.max(500000, ...histD, ...histU);
   ctx.strokeStyle='rgba(255,255,255,0.07)';ctx.lineWidth=1;
@@ -611,14 +832,70 @@ function drawChart(){
   const plot=(arr,col,fill)=>{
     ctx.beginPath();
     arr.forEach((v,i)=>{
-      const x=(i/(arr.length-1))*w, y=h-10-((v/mx)*(h-24));
+      const x=(i/(arr.length-1))*w, y=h-8-((v/mx)*(h-18));
       if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
     });
-    ctx.strokeStyle=col;ctx.lineWidth=2.4;ctx.stroke();
+    ctx.strokeStyle=col;ctx.lineWidth=2.2;ctx.stroke();
     ctx.lineTo(w,h);ctx.lineTo(0,h);ctx.closePath();ctx.fillStyle=fill;ctx.fill();
   };
   plot(histD,'#38bdf8','rgba(56,189,248,0.14)');
   plot(histU,'#fb7185','rgba(251,113,133,0.12)');
+}
+
+function updateOverview(td, tu, used, mq, onlineCnt){
+  if(!$('tab-ov'))return;
+  const totDev=S.devices.length||0;
+  $('ovWanIf').textContent=(S.wan_if||'WAN').toUpperCase();
+  $('ovWanState').textContent=(td+tu>0)?'حركة بيانات نشطة':'جاهز ومتصل';
+  $('ovLanCnt').textContent=onlineCnt+' متصل / '+totDev;
+  $('ovWifiInfo').textContent=S.wifi_disabled?'الوايفاي معطّل':((S.wifi_ssid||'Wi-Fi')+' • '+(S.wifi_clients||0)+' لاسلكي');
+
+  const rt=S.ram_total_kb||1, rf=S.ram_free_kb||0, ramFreePct=Math.min(100,Math.max(0,(rf*100)/rt));
+  $('ovRamTxt').textContent=(rf/1024).toFixed(1)+' / '+(rt/1024).toFixed(1)+' MB ('+ramFreePct.toFixed(0)+'%)';
+  $('ovRamBar').className='bar '+(ramFreePct<15?'err':ramFreePct<30?'warn':'ok');
+  $('ovRamBar').firstChild.style.width=ramFreePct.toFixed(1)+'%';
+
+  const cliPct=totDev>0?Math.min(100,(onlineCnt*100)/totDev):0;
+  $('ovCliTxt').textContent=onlineCnt+' / '+totDev;
+  $('ovCliBar').firstChild.style.width=cliPct.toFixed(1)+'%';
+  $('ovSsidTxt').textContent=S.wifi_ssid||'-';
+  $('ovChTxt').textContent='CH '+(S.wifi_channel||'auto')+(S.wifi_disabled?' (معطل)':'');
+
+  const qPct=mq>0?Math.min(100,(used*100)/mq):0;
+  $('ovQuotaPct').textContent=mq>0?(qPct.toFixed(1)+'%'):'♾️';
+  $('ovQuotaRing').setAttribute('stroke-dashoffset', (314*(1-qPct/100)).toFixed(1));
+  $('ovQuotaRing').setAttribute('stroke', qPct>=95?'#f87171':qPct>=75?'#fbbf24':'var(--acc)');
+
+  const remB=Math.max(0, mq-used);
+  let remDays=S.period_days||30, elDays=1;
+  if(S.end_date && /^\d{4}-\d{2}-\d{2}$/.test(S.end_date)){
+    remDays=Math.max(1, Math.ceil((new Date(S.end_date+'T23:59:59')-Date.now())/86400000));
+  }
+  if(S.start_date && /^\d{4}-\d{2}-\d{2}$/.test(S.start_date)){
+    elDays=Math.max(1, Math.ceil((Date.now()-new Date(S.start_date+'T00:00:00'))/86400000));
+  }
+  $('ovQuotaRem').textContent=mq>0?fmtBytes(remB):'غير محدود';
+  $('ovRemDays').textContent=remDays;
+  const safeDaily=mq>0?(remB/remDays):0, avgDaily=used/elDays;
+  $('ovSafeRate').textContent=mq>0?(fmtBytes(safeDaily)+'/يوم'):'مفتوح';
+
+  const pp=$('ovPredPill');
+  if(mq<=0){pp.className='pred-pill ok';pp.textContent='♾️ باقة مفتوحة بدون حد';}
+  else if(remB<=0){pp.className='pred-pill warn';pp.textContent='⚠️ تم استهلاك كامل الباقة';}
+  else if(avgDaily<=safeDaily*1.05){pp.className='pred-pill ok';pp.textContent='✅ معدل استهلاك آمن ('+fmtBytes(avgDaily)+'/يوم)';}
+  else{
+    const estD=Math.floor(remB/Math.max(1,avgDaily));
+    pp.className='pred-pill warn';pp.textContent='⚠️ بمعدلك الحالي قد تنفد خلال ~'+estD+' يوم';
+  }
+
+  $('ovPeakTxt').textContent=fmtBps(Math.max(peakD,peakU));
+  const maxD=Math.max(1000000,(S.wan_down_kbps||0)*1000,peakD,td);
+  const maxU=Math.max(500000,(S.wan_up_kbps||0)*1000,peakU,tu);
+  $('ovDnVal').textContent=fmtBps(td);
+  $('ovUpVal').textContent=fmtBps(tu);
+  $('ovDnRing').setAttribute('stroke-dashoffset',(314*(1-Math.min(1,td/maxD))).toFixed(1));
+  $('ovUpRing').setAttribute('stroke-dashoffset',(314*(1-Math.min(1,tu/maxU))).toFixed(1));
+  if($('tab-ov').classList.contains('active')) drawCanvasChart('ovChart');
 }
 
 function applyOfflineVis(){
@@ -822,7 +1099,7 @@ function renderListInto(wrap,list,emptyMsg,isTbl,force){
           <div class="cap-lbl${d.speed_unlocked?' unlocked':''}" data-role="cap-lbl">${devCapLabel(d)}</div>
         </td>
         <td>
-          <input class="${cls('tg','tinp')}" data-f="tg" value="${esc(v.tg)}" placeholder="Chat ID" style="width:98px;font-family:monospace;text-align:center" title="معرف التيليجرام لهذا الجهاز" oninput="onDevInp('${d.mac}','tg',this)" onkeydown="onDevKey(event,'${d.mac}')">
+          <input class="${cls('tg','tinp')}" data-f="tg" list="tgUsersDL" value="${esc(v.tg)}" placeholder="Chat ID" style="width:98px;font-family:monospace;text-align:center" title="معرف التيليجرام لهذا الجهاز" oninput="onDevInp('${d.mac}','tg',this)" onkeydown="onDevKey(event,'${d.mac}')">
         </td>
         <td><div class="act-cell">${devRowBtns(d,v.dirty)}</div></td>
       </tr>`;
@@ -874,7 +1151,7 @@ function renderListInto(wrap,list,emptyMsg,isTbl,force){
           <span class="cap-lbl${d.speed_unlocked?' unlocked':''}" data-role="cap-lbl">${devCapLabel(d)}</span>
         </div>
         <div>
-          <input class="${cls('tg')}" data-f="tg" value="${esc(v.tg)}" placeholder="Telegram Chat ID" style="width:100%;font-family:monospace" oninput="onDevInp('${d.mac}','tg',this)" onkeydown="onDevKey(event,'${d.mac}')">
+          <input class="${cls('tg')}" data-f="tg" list="tgUsersDL" value="${esc(v.tg)}" placeholder="Telegram Chat ID" style="width:100%;font-family:monospace" oninput="onDevInp('${d.mac}','tg',this)" onkeydown="onDevKey(event,'${d.mac}')">
         </div>
         <div class="acts">${devRowBtns(d,v.dirty)}</div>
       </div>`;
@@ -914,7 +1191,15 @@ async function saveRow(mac){
   document.querySelectorAll('[data-mac="'+mac+'"] .dirty').forEach(e=>e.classList.remove('dirty'));
   toast('تم حفظ بيانات الجهاز');await poll();
 }
-async function addGb(mac,gb){await api('device_add_quota',{mac,add_bytes:Math.round(gb*gbUnit())});if(dirtyMap[mac])delete dirtyMap[mac].quota;toast('تمت إضافة '+gb+' GB');await poll();}
+async function addGb(mac,gb){
+  const r=await api('device_add_quota',{mac,add_bytes:Math.round(gb*gbUnit())});
+  if(!r||!r.ok){toast(r&&r.error?r.error:'تعذر إضافة الجيجات');return;}
+  if(dirtyMap[mac])delete dirtyMap[mac].quota;
+  const qi=document.querySelector(`[data-mac="${mac}"] [data-f="quota"]`);
+  if(qi&&document.activeElement===qi)qi.blur();
+  toast('تمت إضافة '+gb+' GB');
+  await poll();
+}
 async function togBlk(mac,blk){await api('device_block',{mac,blocked:blk});toast(blk?'تم الحظر':'تم فك الحظر');await poll();}
 async function togVip(mac,vip){await api('device_gaming',{mac,gaming_mode:vip});toast(vip?'تم تفعيل VIP':'تم إلغاء VIP');await poll();}
 async function togUnlim(mac,unl){await api('device_speed_unlock',{mac,speed_unlocked:unl});toast(unl?'🚀 تم فتح السرعة الكاملة للجهاز':'🔒 تم إعادة تطبيق السرعة المحددة');await poll();}
@@ -970,6 +1255,8 @@ async function saveTg(test){
   toast(r.msg||(r.ok?'تم حفظ إعدادات تليجرام':'حدث خطأ'));poll();
 }
 function renderTgUsers(){
+  const dl=$('tgUsersDL');
+  if(dl) dl.innerHTML=TG_USERS.map(u=>`<option value="${esc(u.chat_id)}">${esc(u.name||'User')} (${esc(u.chat_id)})</option>`).join('');
   if(!TG_USERS.length){$('tgUsersList').innerHTML='<span style="font-size:12px;color:var(--muted)">لم يتواصل أحد مع البوت بعد.</span>';return;}
   $('tgUsersList').innerHTML=TG_USERS.map(u=>`<div class="pill" style="justify-content:space-between;width:100%">
     <span>${esc(u.name||'User')} — <code>${esc(u.chat_id)}</code></span>
@@ -977,23 +1264,102 @@ function renderTgUsers(){
   </div>`).join('');
 }
 
+function getAlertThresholds(){
+  return ($('tgThr').value||'50,75,90,95,100').split(',').map(x=>parseInt(x.trim(),10)).filter(n=>n>0&&n<=100).slice(0,8);
+}
+function buildAlertEditors(preserveDrafts){
+  const box=$('tgAlertEditors'); if(!box)return;
+  const drafts=[];
+  if(preserveDrafts){
+    box.querySelectorAll('textarea').forEach((ta,idx)=>{drafts[idx]=ta.value;});
+  }
+  const saved=(S&&Array.isArray(S.tg_alert_msgs))?S.tg_alert_msgs:[];
+  const thrs=getAlertThresholds();
+  if(!thrs.length){box.innerHTML='<p style="color:var(--muted);font-size:12px">أدخل نسب تنبيه صحيحة مثل 50,75,90,95,100</p>';return;}
+  box.innerHTML=thrs.map((p,i)=>{
+    const val=preserveDrafts&&drafts[i]!==undefined?drafts[i]:(saved[i]||'');
+    return `<div class="alert-card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b>🔔 تنبيه عند نسبة ${p}%</b>
+        <small style="color:var(--muted)">خانة #${i+1}</small>
+      </div>
+      <textarea data-idx="${i}" placeholder="اتركه فارغاً للنص الافتراضي أو اكتب رسالة مخصصة مع {name} و {pct}% و {used} و {rem}..." onfocus="lastAlertEl=this">${esc(val)}</textarea>
+    </div>`;
+  }).join('');
+}
+$('tgThr').oninput=()=>buildAlertEditors(true);
+function insAlertVar(v){
+  const box=$('tgAlertEditors');
+  const ta=lastAlertEl||(box?box.querySelector('textarea'):null);
+  if(!ta){toast('اختر خانة رسالة أولاً');return;}
+  const st=ta.selectionStart??ta.value.length, en=ta.selectionEnd??ta.value.length;
+  ta.value=ta.value.slice(0,st)+v+ta.value.slice(en);
+  ta.focus();
+  ta.selectionStart=ta.selectionEnd=st+v.length;
+}
+async function saveTgAlerts(){
+  const msgs=Array(8).fill('');
+  $('tgAlertEditors').querySelectorAll('textarea').forEach(ta=>{
+    const idx=parseInt(ta.dataset.idx,10);
+    if(idx>=0&&idx<8) msgs[idx]=ta.value.slice(0,250);
+  });
+  const r=await api('tg_alerts_save',{tg_alert_msgs:msgs});
+  if(r.ok){toast('تم حفظ قوالب الإشعارات');await poll();}
+  else toast(r.error||'فشل الحفظ');
+}
+async function resetTgAlerts(){
+  if(!confirm('مسح جميع القوالب المخصصة والعودة للنص الافتراضي؟'))return;
+  $('tgAlertEditors').querySelectorAll('textarea').forEach(ta=>ta.value='');
+  await saveTgAlerts();
+}
+
+function autoTz(){
+  const tz=Math.round(-new Date().getTimezoneOffset()/60);
+  $('rbTz').value=tz;
+  toast('تم ضبط المنطقة الزمنية على UTC'+(tz>=0?'+':'')+tz);
+}
+async function syncNtp(){
+  toast('جاري مزامنة الوقت عبر الإنترنت...');
+  const r=await api('ntp_sync',{});
+  toast(r.msg||r.error||(r.ok?'تمت المزامنة':'فشلت المزامنة'));
+  poll();
+}
+async function saveSysOpts(){
+  const r=await api('sys_opts_save',{observer_mode:$('obsMode').checked,ota_auto_check:$('otaAutoChk').checked});
+  toast(r.msg||(r.ok?'تم حفظ خيارات النظام':'فشل الحفظ'));
+  poll();
+}
 async function saveAutoReboot(){
   await api('auto_reboot',{enabled:$('rbEn').checked,hour:parseInt($('rbHr').value)||0,min:parseInt($('rbMn').value)||0,tz:parseInt($('rbTz').value)||0});
   toast('تم حفظ جدولة إعادة التشغيل');poll();
 }
 async function rebootNow(){if(!confirm('إعادة تشغيل الراوتر الآن؟'))return;await api('reboot_now',{countdown_s:3});toast('جاري إعادة التشغيل...');poll();}
+async function rebootCountdownMin(){
+  const m=parseInt($('rbCdMin').value,10)||1;
+  await api('reboot_now',{countdown_s:m*60});
+  toast('سيعاد التشغيل بعد '+m+' دقيقة');poll();
+}
+async function cancelRebootTimer(){
+  await api('reboot_now',{countdown_s:-1});
+  toast('تم إلغاء مؤقت إعادة التشغيل');poll();
+}
 async function changePass(){
   const r=await api('password',{old_password:$('pOld').value,new_username:$('pUser').value.trim(),new_password:$('pNew').value});
   if(r.ok){toast('تم تحديث بيانات الدخول');$('pOld').value='';$('pNew').value='';}else toast(r.error||'فشل التحديث');
 }
 
-async function saveOtaUrl(){await api('ota_save',{ota_version_url:$('otaVerUrl').value.trim()});toast('تم حفظ رابط التحقق');}
+async function saveOtaUrl(){
+  await api('ota_save',{ota_version_url:$('otaVerUrl').value.trim(),ota_auto_check:$('otaAutoChk').checked});
+  toast('تم حفظ رابط التحقق');
+}
 async function checkOta(){
   $('otaRes').textContent='جاري الفحص...';
   const r=await api('ota_check',{url:$('otaVerUrl').value.trim()});
   if(r.ok&&r.remote){
-    $('otaRes').innerHTML=`أحدث إصدار: <b>${esc(r.remote.version||'?')}</b> — ${esc(r.remote.notes||'')}`;
-    if(r.remote.url)$('otaBinUrl').value=r.remote.url;
+    const note=r.remote.changelog||r.remote.notes||'';
+    const bUrl=r.remote.firmware_url||r.remote.url||'';
+    $('otaRes').innerHTML=`أحدث إصدار: <b>${esc(r.remote.version||'?')}</b>${note?(' — '+esc(note)):''}`;
+    if(bUrl)$('otaBinUrl').value=bUrl;
   } else $('otaRes').textContent=r.error||'فشل الفحص';
 }
 async function flashOtaUrl(){
@@ -1005,17 +1371,34 @@ function uploadOtaFile(){
   const f=$('otaFile').files[0];if(!f){toast('اختر ملف .bin أولاً');return;}
   if(!confirm('تثبيت ملف الفيرموير '+f.name+'؟'))return;
   const bar=$('otaProgBar'),fill=$('otaProgFill');bar.classList.remove('hide');fill.style.width='0%';
+  stopPoll();
+  let uploadDone=false;
   const xhr=new XMLHttpRequest();
+  xhr.timeout=180000;
   xhr.open('POST','/cgi-bin/api?action=ota_upload');
-  xhr.upload.onprogress=e=>{if(e.lengthComputable)fill.style.width=((e.loaded*100)/e.total).toFixed(0)+'%';};
-  xhr.onload=()=>{try{const r=JSON.parse(xhr.responseText);toast(r.msg||r.error||'انتهى');}catch(e){toast('جاري إعادة تشغيل الراوتر...');}};
+  xhr.upload.onprogress=e=>{if(e.lengthComputable){const p=(e.loaded*100)/e.total;fill.style.width=p.toFixed(0)+'%';if(e.loaded>=e.total)uploadDone=true;}};
+  xhr.onload=()=>{
+    startPoll();
+    if(xhr.status!==200){toast('فشل التحديث: HTTP '+xhr.status);return;}
+    try{
+      const r=JSON.parse(xhr.responseText);
+      toast(r.msg||r.error||(r.ok?'تم التحديث':'فشل التحديث'));
+      if(!r.ok)bar.classList.add('hide');
+    }catch(e){
+      toast(uploadDone&&!xhr.responseText?'⚠️ تم استلام الملف — تحقق من إعادة التشغيل بعد دقيقة':'❌ استجابة غير متوقعة من الراوتر أثناء التحديث');
+    }
+  };
+  xhr.onerror=()=>{startPoll();toast('❌ انقطع الاتصال أثناء رفع ملف التحديث');};
+  xhr.ontimeout=()=>{startPoll();toast('❌ انتهى وقت التحقق من التحديث — حاول مجدداً');};
   xhr.send(f);
 }
 
 (async function init(){
   try{
     const a=await api('auth_status');
-    if(a.authenticated){showApp();await poll();setInterval(poll,1000);}
+    isAdmin=!!a.authenticated;
+    observerMode=!!a.observer_mode;
+    if(isAdmin||observerMode){showApp();await poll();startPoll();}
     else showLogin();
   }catch(e){showLogin();}
 })();

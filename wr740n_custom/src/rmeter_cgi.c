@@ -1,12 +1,15 @@
 #include "json_util.h"
 
 #include <ctype.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #define CTRL_SOCK_PATH "/tmp/rmeter/ctrl.sock"
@@ -121,6 +124,48 @@ static bool check_auth(void) {
         }
     }
     return false;
+}
+
+static bool is_observer_mode_on(void) {
+    FILE *fp = fopen(STATE_JSON, "r");
+    if (fp) {
+        char buf[1024];
+        size_t n = fread(buf, 1, sizeof(buf) - 1, fp);
+        fclose(fp);
+        buf[n] = '\0';
+        bool obs = false;
+        if (json_get_bool(buf, "observer_mode", &obs)) return obs;
+    }
+    fp = fopen("/etc/rmeter/config.conf", "r");
+    if (fp) {
+        char line[256];
+        while (fgets(line, sizeof(line), fp)) {
+            if (strncmp(line, "observer_mode_enabled=", 22) == 0) {
+                bool obs = (atoi(line + 22) != 0);
+                fclose(fp);
+                return obs;
+            }
+        }
+        fclose(fp);
+    }
+    return false;
+}
+
+static void redact_json_str_field(char *json, const char *key) {
+    if (!json || !key) return;
+    char pat[64];
+    snprintf(pat, sizeof(pat), "\"%s\"", key);
+    char *p = strstr(json, pat);
+    if (!p) return;
+    p += strlen(pat);
+    while (*p && (*p == ' ' || *p == ':')) p++;
+    if (*p != '"') return;
+    p++;
+    char *q = p;
+    while (*q && !(*q == '"' && q[-1] != '\\')) q++;
+    if (*q == '"') {
+        memmove(p, q, strlen(q) + 1);
+    }
 }
 
 static bool send_ipc(const char *json_req, char *resp, size_t resp_sz) {
@@ -330,12 +375,44 @@ static void handle_ota_check(const char *body) {
     printf("{\"ok\":true,\"remote\":%s}\n", buf[0] == '{' ? buf : "{}");
 }
 
+static void launch_sysupgrade_detached(void) {
+    pid_t pid = fork();
+    if (pid < 0) return;
+    if (pid == 0) {
+        setsid();
+        pid_t pid2 = fork();
+        if (pid2 > 0) _exit(0);
+        int fd = open("/dev/null", O_RDWR);
+        if (fd >= 0) {
+            dup2(fd, STDIN_FILENO);
+            dup2(fd, STDOUT_FILENO);
+            dup2(fd, STDERR_FILENO);
+            if (fd > 2) close(fd);
+        }
+        sleep(2);
+        sync();
+        int dc = open("/proc/sys/vm/drop_caches", O_WRONLY);
+        if (dc >= 0) {
+            ssize_t wr = write(dc, "3\n", 2);
+            (void)wr;
+            close(dc);
+        }
+        if (system("/etc/init.d/rmeterd stop >/dev/null 2>&1") != 0) {}
+        execl("/sbin/sysupgrade", "sysupgrade", "/tmp/fw_ota.bin", (char *)NULL);
+        _exit(127);
+    }
+    waitpid(pid, NULL, 0);
+}
+
 static void handle_ota_upload(size_t clen) {
     if (clen < 65536 || clen > 3932160) {
         send_json_hdr(NULL);
         printf("{\"ok\":false,\"error\":\"حجم ملف الفيرموير غير صالح\"}\n");
         return;
     }
+    /* Flush pending stats to flash & free Linux page cache before 3.7MB RAM write on 32MB device */
+    char ipc_resp[128] = {0};
+    send_ipc("{\"action\":\"flush_save\"}", ipc_resp, sizeof(ipc_resp));
     FILE *fp = fopen("/tmp/fw_ota.bin", "wb");
     if (!fp) {
         send_json_hdr(NULL);
@@ -344,14 +421,25 @@ static void handle_ota_upload(size_t clen) {
     }
     char buf[4096];
     size_t rem = clen;
+    bool write_ok = true;
     while (rem > 0) {
         size_t chunk = rem > sizeof(buf) ? sizeof(buf) : rem;
         size_t got = fread(buf, 1, chunk, stdin);
         if (got == 0) break;
-        fwrite(buf, 1, got, fp);
+        if (fwrite(buf, 1, got, fp) != got) {
+            write_ok = false;
+            break;
+        }
         rem -= got;
     }
     fclose(fp);
+
+    if (!write_ok || rem != 0) {
+        unlink("/tmp/fw_ota.bin");
+        send_json_hdr(NULL);
+        printf("{\"ok\":false,\"error\":\"انقطع رفع ملف الفيرموير قبل اكتماله (%zu بايت ناقصة)\"}\n", rem);
+        return;
+    }
 
     if (system("sysupgrade -T /tmp/fw_ota.bin >/dev/null 2>&1") != 0) {
         unlink("/tmp/fw_ota.bin");
@@ -362,7 +450,7 @@ static void handle_ota_upload(size_t clen) {
     send_json_hdr(NULL);
     printf("{\"ok\":true,\"msg\":\"تم التحقق بنجاح، جاري التحديث وإعادة التشغيل...\"}\n");
     fflush(stdout);
-    system("(sleep 2; sysupgrade /tmp/fw_ota.bin) >/dev/null 2>&1 &");
+    launch_sysupgrade_detached();
 }
 
 static void handle_ota_url(const char *body) {
@@ -372,6 +460,8 @@ static void handle_ota_url(const char *body) {
         printf("{\"ok\":false,\"error\":\"رابط غير صالح\"}\n");
         return;
     }
+    char ipc_resp[128] = {0};
+    send_ipc("{\"action\":\"flush_save\"}", ipc_resp, sizeof(ipc_resp));
     char cmd[384];
     const char *ca_opt = (access(TG_CA_FILE, R_OK) == 0) ? "--ca-certificate=" TG_CA_FILE : "--no-check-certificate";
     snprintf(cmd, sizeof(cmd), "uclient-fetch -q -T 60 %s -O /tmp/fw_ota.bin '%s' 2>/dev/null", ca_opt, url);
@@ -384,7 +474,7 @@ static void handle_ota_url(const char *body) {
     send_json_hdr(NULL);
     printf("{\"ok\":true,\"msg\":\"تم التنزيل والتحقق، جاري الترقية وإعادة التشغيل...\"}\n");
     fflush(stdout);
-    system("(sleep 2; sysupgrade /tmp/fw_ota.bin) >/dev/null 2>&1 &");
+    launch_sysupgrade_detached();
 }
 
 int main(void) {
@@ -405,17 +495,21 @@ int main(void) {
         return 0;
     }
 
-    char body[4096] = {0};
+    char body[6144] = {0};
     if (clen > 0 && clen < sizeof(body)) {
         size_t got = fread(body, 1, clen, stdin);
         body[got] = '\0';
     }
 
+    bool authed = check_auth();
+
     if (strcmp(action, "auth_status") == 0) {
         char u[64], p[64];
         load_auth(u, sizeof(u), p, sizeof(p));
         send_json_hdr(NULL);
-        printf("{\"authenticated\":%s,\"user\":\"%s\"}\n", check_auth() ? "true" : "false", u);
+        printf("{\"authenticated\":%s,\"observer_mode\":%s,\"user\":\"%s\"}\n",
+               authed ? "true" : "false",
+               is_observer_mode_on() ? "true" : "false", u);
         return 0;
     }
 
@@ -448,7 +542,9 @@ int main(void) {
         return 0;
     }
 
-    if (!check_auth()) {
+    bool allow_observer_read = (strcmp(action, "state") == 0 && is_observer_mode_on());
+
+    if (!authed && !allow_observer_read) {
         printf("Status: 401 Unauthorized\r\n");
         send_json_hdr(NULL);
         printf("{\"ok\":false,\"error\":\"unauthorized\"}\n");
@@ -476,25 +572,49 @@ int main(void) {
         send_json_hdr(NULL);
         FILE *fp = fopen(STATE_JSON, "r");
         FILE *tf = fopen(TG_USERS_JSON, "r");
-        printf("{\"ok\":true,\"state\":");
+        printf("{\"ok\":true,\"authenticated\":%s,\"state\":", authed ? "true" : "false");
         if (fp) {
-            char buf[2048];
-            size_t n;
-            while ((n = fread(buf, 1, sizeof(buf), fp)) > 0) fwrite(buf, 1, n, stdout);
+            fseek(fp, 0, SEEK_END);
+            long fsz = ftell(fp);
+            fseek(fp, 0, SEEK_SET);
+            if (fsz > 0 && fsz < 262144) {
+                char *sbuf = malloc((size_t)fsz + 1);
+                if (sbuf) {
+                    size_t n = fread(sbuf, 1, (size_t)fsz, fp);
+                    sbuf[n] = '\0';
+                    if (!authed) {
+                        redact_json_str_field(sbuf, "tg_token");
+                        redact_json_str_field(sbuf, "tg_admin_ids");
+                    }
+                    fwrite(sbuf, 1, strlen(sbuf), stdout);
+                    free(sbuf);
+                } else {
+                    printf("{}");
+                }
+            } else {
+                printf("{}");
+            }
             fclose(fp);
         } else {
             printf("{}");
         }
         printf(",\"tg_users\":");
-        if (tf) {
+        if (tf && authed) {
             char buf[1024];
             size_t n;
             while ((n = fread(buf, 1, sizeof(buf), tf)) > 0) fwrite(buf, 1, n, stdout);
-            fclose(tf);
         } else {
             printf("[]");
         }
+        if (tf) fclose(tf);
         printf("}\n");
+        return 0;
+    }
+
+    if (strcmp(action, "ntp_sync") == 0) {
+        system("(ntpd -q -n -p pool.ntp.org -p time.google.com >/dev/null 2>&1 & p=$!; sleep 3; kill $p 2>/dev/null) >/dev/null 2>&1");
+        send_json_hdr(NULL);
+        printf("{\"ok\":true,\"epoch\":%lld}\n", (long long)time(NULL));
         return 0;
     }
 
@@ -516,7 +636,7 @@ int main(void) {
     }
 
     /* Forward all other actions to rmeterd IPC */
-    char ipc_req[4400];
+    char ipc_req[6400];
     if (strstr(body, "\"action\"") != NULL) {
         snprintf(ipc_req, sizeof(ipc_req), "%s", body);
     } else if (body[0] == '{') {

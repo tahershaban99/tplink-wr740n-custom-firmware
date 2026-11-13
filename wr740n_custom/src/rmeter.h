@@ -13,7 +13,11 @@
 #define RMETER_STATE_RAM       "/tmp/rmeter/state.json"
 #define RMETER_STATE_FLASH     "/etc/rmeter/devices.db"
 #define RMETER_CFG_FLASH       "/etc/rmeter/config.conf"
+#define RMETER_TG_ALERTS_FLASH "/etc/rmeter/tg_alerts.conf"
+#define RMETER_SCHED_RB_FLAG   "/etc/rmeter/sched_reboot.flag"
 #define RMETER_TG_USERS_RAM    "/tmp/rmeter/tg_users.json"
+#define RMETER_OTA_VER_RAM     "/tmp/rmeter/ota_ver.json"
+#define RMETER_CA_PEM          "/etc/rmeter/tg_ca.pem"
 
 typedef struct {
     char mac[18];              /* AA:BB:CC:DD:EE:FF */
@@ -34,6 +38,7 @@ typedef struct {
 
     uint64_t prev_ipt_up;      /* last raw iptables byte counter */
     uint64_t prev_ipt_down;    /* last raw iptables byte counter */
+    char ipt_ip[16];           /* IP currently ensured in RMETER_DL/UL */
 
     bool online;
     bool is_wifi;
@@ -57,7 +62,7 @@ typedef struct {
 
     uint16_t gb_standard;      /* 1000 or 1024 */
     uint16_t scale_pct;        /* 50..200, default 100 */
-    uint8_t  scale_mode;       /* 0 = dynamic, 1 = cumulative */
+    uint8_t  scale_mode;       /* 0 = apply scale_pct, 1 = raw 100% */
 
     bool auto_reboot_enabled;
     uint8_t auto_reboot_hour;
@@ -74,6 +79,9 @@ typedef struct {
 
     char ota_version_url[192];
     char fw_version[24];
+    bool observer_mode_enabled;
+    bool ota_auto_check_enabled;
+    char tg_alert_msgs[RMETER_MAX_THRESHOLDS][256];
 } rmeter_config_t;
 
 #endif /* RMETER_H */

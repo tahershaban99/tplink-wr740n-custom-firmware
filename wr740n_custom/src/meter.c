@@ -25,7 +25,33 @@ bool g_flash_dirty = false;
 
 static uint64_t s_prev_wan_rx = 0;
 static uint64_t s_prev_wan_tx = 0;
+static uint64_t s_prev_wan_ns = 0;
+static uint64_t s_prev_ipt_ns = 0;
+static uint64_t s_last_saved_raw_bytes = 0;
 static bool s_wan_init = false;
+
+static uint64_t monotonic_ns(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0;
+    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+}
+
+static uint32_t calc_clamped_bps(uint64_t delta_bytes, double dt_sec) {
+    if (delta_bytes == 0 || dt_sec < 0.05) return 0;
+    double bps = ((double)delta_bytes * 8.0) / dt_sec;
+    if (bps >= 1000000000.0) return 1000000000U;
+    return (uint32_t)bps;
+}
+
+static uint32_t smooth_bps(uint32_t prev, uint32_t inst) {
+    if (inst == 0) return prev / 2U;
+    uint64_t v = ((uint64_t)prev + (uint64_t)inst * 3ULL) / 4ULL;
+    return (v > 1000000000ULL) ? 1000000000U : (uint32_t)v;
+}
+static char s_wifi_ssid[64] = "RouterMeter";
+static char s_wifi_chan[16] = "auto";
+static bool s_wifi_disabled = false;
+static time_t s_last_wifi_meta = 0;
 
 static void norm_mac(const char *in, char *out, size_t sz) {
     if (!in || !out || sz < 18) return;
@@ -118,7 +144,9 @@ static void init_default_config(void) {
     g_config.tg_enabled = false;
     g_config.tg_interactive = true;
     snprintf(g_config.tg_thresholds, sizeof(g_config.tg_thresholds), "50,75,90,95,100");
-    snprintf(g_config.fw_version, sizeof(g_config.fw_version), "1.0.0-wr740nv4");
+    snprintf(g_config.fw_version, sizeof(g_config.fw_version), "1.1.3-wr740nv4");
+    g_config.observer_mode_enabled = false;
+    g_config.ota_auto_check_enabled = true;
 }
 
 void meter_load_all(void) {
@@ -155,6 +183,38 @@ void meter_load_all(void) {
             else if (strcmp(k, "main_alert_flags") == 0) g_config.main_alert_flags = (uint16_t)atoi(v);
             else if (strcmp(k, "tg_last_update_id") == 0) g_config.tg_last_update_id = strtoll(v, NULL, 10);
             else if (strcmp(k, "ota_version_url") == 0) snprintf(g_config.ota_version_url, sizeof(g_config.ota_version_url), "%s", v);
+            else if (strcmp(k, "observer_mode_enabled") == 0) g_config.observer_mode_enabled = (atoi(v) != 0);
+            else if (strcmp(k, "ota_auto_check_enabled") == 0) g_config.ota_auto_check_enabled = (atoi(v) != 0);
+        }
+        fclose(fp);
+    }
+
+    fp = fopen(RMETER_TG_ALERTS_FLASH, "r");
+    if (fp) {
+        char line[768];
+        while (fgets(line, sizeof(line), fp)) {
+            char *nl = strpbrk(line, "\r\n");
+            if (nl) *nl = '\0';
+            char *eq = strchr(line, '=');
+            if (!eq) continue;
+            *eq = '\0';
+            int idx = atoi(line);
+            if (idx < 0 || idx >= RMETER_MAX_THRESHOLDS) continue;
+            const char *src = eq + 1;
+            char *dst = g_config.tg_alert_msgs[idx];
+            size_t j = 0;
+            for (size_t i = 0; src[i] && j + 1 < sizeof(g_config.tg_alert_msgs[idx]); i++) {
+                if (src[i] == '\\' && src[i + 1] == 'n') {
+                    dst[j++] = '\n';
+                    i++;
+                } else if (src[i] == '\\' && src[i + 1] == '\\') {
+                    dst[j++] = '\\';
+                    i++;
+                } else {
+                    dst[j++] = src[i];
+                }
+            }
+            dst[j] = '\0';
         }
         fclose(fp);
     }
@@ -200,46 +260,104 @@ void meter_load_all(void) {
         }
         fclose(fp);
     }
+    s_last_saved_raw_bytes = 0;
+    for (int i = 0; i < g_device_count; i++) {
+        s_last_saved_raw_bytes += g_devices[i].up_bytes + g_devices[i].down_bytes;
+    }
+}
+
+static bool commit_tmp_file(FILE *fp, const char *tmp_path, const char *dst_path) {
+    if (!fp) return false;
+    bool ok = (fflush(fp) == 0 && !ferror(fp));
+    if (fclose(fp) != 0) ok = false;
+    if (ok && rename(tmp_path, dst_path) != 0) ok = false;
+    if (!ok) remove(tmp_path);
+    return ok;
 }
 
 void meter_save_all(void) {
     mkdir("/etc/rmeter", 0755);
 
+    rmeter_config_t *snap_cfg = malloc(sizeof(rmeter_config_t));
+    rmeter_device_t *snap_devs = malloc(sizeof(rmeter_device_t) * RMETER_MAX_DEVICES);
+    if (!snap_cfg || !snap_devs) {
+        free(snap_cfg);
+        free(snap_devs);
+        return;
+    }
+
+    pthread_mutex_lock(&g_lock);
+    *snap_cfg = g_config;
+    int snap_cnt = g_device_count;
+    if (snap_cnt < 0) snap_cnt = 0;
+    if (snap_cnt > RMETER_MAX_DEVICES) snap_cnt = RMETER_MAX_DEVICES;
+    uint64_t snap_raw = 0;
+    if (snap_cnt > 0) {
+        memcpy(snap_devs, g_devices, sizeof(rmeter_device_t) * (size_t)snap_cnt);
+        for (int i = 0; i < snap_cnt; i++) {
+            snap_raw += snap_devs[i].up_bytes + snap_devs[i].down_bytes;
+        }
+    }
+    s_last_saved_raw_bytes = snap_raw;
+    g_flash_dirty = false;
+    pthread_mutex_unlock(&g_lock);
+
+    bool write_err = false;
     char tmp_cfg[128];
     snprintf(tmp_cfg, sizeof(tmp_cfg), "%s.tmp", RMETER_CFG_FLASH);
     FILE *fp = fopen(tmp_cfg, "w");
     if (fp) {
-        fprintf(fp, "main_quota_bytes=%llu\n", (unsigned long long)g_config.main_quota_bytes);
-        fprintf(fp, "wan_down_kbps=%u\n", (unsigned)g_config.wan_down_kbps);
-        fprintf(fp, "wan_up_kbps=%u\n", (unsigned)g_config.wan_up_kbps);
-        fprintf(fp, "start_date=%s\n", g_config.start_date);
-        fprintf(fp, "end_date=%s\n", g_config.end_date);
-        fprintf(fp, "period_days=%u\n", (unsigned)g_config.period_days);
-        fprintf(fp, "gb_standard=%u\n", (unsigned)g_config.gb_standard);
-        fprintf(fp, "scale_pct=%u\n", (unsigned)g_config.scale_pct);
-        fprintf(fp, "scale_mode=%u\n", (unsigned)g_config.scale_mode);
-        fprintf(fp, "auto_reboot_enabled=%d\n", g_config.auto_reboot_enabled ? 1 : 0);
-        fprintf(fp, "auto_reboot_hour=%u\n", (unsigned)g_config.auto_reboot_hour);
-        fprintf(fp, "auto_reboot_min=%u\n", (unsigned)g_config.auto_reboot_min);
-        fprintf(fp, "auto_reboot_tz=%d\n", (int)g_config.auto_reboot_tz);
-        fprintf(fp, "tg_enabled=%d\n", g_config.tg_enabled ? 1 : 0);
-        fprintf(fp, "tg_interactive=%d\n", g_config.tg_interactive ? 1 : 0);
-        fprintf(fp, "tg_token=%s\n", g_config.tg_token);
-        fprintf(fp, "tg_admin_ids=%s\n", g_config.tg_admin_ids);
-        fprintf(fp, "tg_thresholds=%s\n", g_config.tg_thresholds);
-        fprintf(fp, "main_alert_flags=%u\n", (unsigned)g_config.main_alert_flags);
-        fprintf(fp, "tg_last_update_id=%lld\n", (long long)g_config.tg_last_update_id);
-        fprintf(fp, "ota_version_url=%s\n", g_config.ota_version_url);
-        fclose(fp);
-        rename(tmp_cfg, RMETER_CFG_FLASH);
+        fprintf(fp, "main_quota_bytes=%llu\n", (unsigned long long)snap_cfg->main_quota_bytes);
+        fprintf(fp, "wan_down_kbps=%u\n", (unsigned)snap_cfg->wan_down_kbps);
+        fprintf(fp, "wan_up_kbps=%u\n", (unsigned)snap_cfg->wan_up_kbps);
+        fprintf(fp, "start_date=%s\n", snap_cfg->start_date);
+        fprintf(fp, "end_date=%s\n", snap_cfg->end_date);
+        fprintf(fp, "period_days=%u\n", (unsigned)snap_cfg->period_days);
+        fprintf(fp, "gb_standard=%u\n", (unsigned)snap_cfg->gb_standard);
+        fprintf(fp, "scale_pct=%u\n", (unsigned)snap_cfg->scale_pct);
+        fprintf(fp, "scale_mode=%u\n", (unsigned)snap_cfg->scale_mode);
+        fprintf(fp, "auto_reboot_enabled=%d\n", snap_cfg->auto_reboot_enabled ? 1 : 0);
+        fprintf(fp, "auto_reboot_hour=%u\n", (unsigned)snap_cfg->auto_reboot_hour);
+        fprintf(fp, "auto_reboot_min=%u\n", (unsigned)snap_cfg->auto_reboot_min);
+        fprintf(fp, "auto_reboot_tz=%d\n", (int)snap_cfg->auto_reboot_tz);
+        fprintf(fp, "tg_enabled=%d\n", snap_cfg->tg_enabled ? 1 : 0);
+        fprintf(fp, "tg_interactive=%d\n", snap_cfg->tg_interactive ? 1 : 0);
+        fprintf(fp, "tg_token=%s\n", snap_cfg->tg_token);
+        fprintf(fp, "tg_admin_ids=%s\n", snap_cfg->tg_admin_ids);
+        fprintf(fp, "tg_thresholds=%s\n", snap_cfg->tg_thresholds);
+        fprintf(fp, "main_alert_flags=%u\n", (unsigned)snap_cfg->main_alert_flags);
+        fprintf(fp, "tg_last_update_id=%lld\n", (long long)snap_cfg->tg_last_update_id);
+        fprintf(fp, "ota_version_url=%s\n", snap_cfg->ota_version_url);
+        fprintf(fp, "observer_mode_enabled=%d\n", snap_cfg->observer_mode_enabled ? 1 : 0);
+        fprintf(fp, "ota_auto_check_enabled=%d\n", snap_cfg->ota_auto_check_enabled ? 1 : 0);
+        if (!commit_tmp_file(fp, tmp_cfg, RMETER_CFG_FLASH)) write_err = true;
+    }
+
+    char tmp_alerts[128];
+    snprintf(tmp_alerts, sizeof(tmp_alerts), "%s.tmp", RMETER_TG_ALERTS_FLASH);
+    fp = fopen(tmp_alerts, "w");
+    if (fp) {
+        for (int i = 0; i < RMETER_MAX_THRESHOLDS; i++) {
+            if (!snap_cfg->tg_alert_msgs[i][0]) continue;
+            fprintf(fp, "%d=", i);
+            for (size_t k = 0; snap_cfg->tg_alert_msgs[i][k]; k++) {
+                char c = snap_cfg->tg_alert_msgs[i][k];
+                if (c == '\n') fputs("\\n", fp);
+                else if (c == '\r') continue;
+                else if (c == '\\') fputs("\\\\", fp);
+                else fputc(c, fp);
+            }
+            fputc('\n', fp);
+        }
+        if (!commit_tmp_file(fp, tmp_alerts, RMETER_TG_ALERTS_FLASH)) write_err = true;
     }
 
     char tmp_db[128];
     snprintf(tmp_db, sizeof(tmp_db), "%s.tmp", RMETER_STATE_FLASH);
     fp = fopen(tmp_db, "w");
     if (fp) {
-        for (int i = 0; i < g_device_count; i++) {
-            rmeter_device_t *d = &g_devices[i];
+        for (int i = 0; i < snap_cnt; i++) {
+            rmeter_device_t *d = &snap_devs[i];
             fprintf(fp, "%s|%s|%s|%llu|%llu|%llu|%u|%u|%d|%d|%d|%u|%s|%d\n",
                     d->mac, d->bound_ip, d->name,
                     (unsigned long long)d->up_bytes,
@@ -254,10 +372,17 @@ void meter_save_all(void) {
                     d->tg_chat_id,
                     d->speed_unlocked ? 1 : 0);
         }
-        fclose(fp);
-        rename(tmp_db, RMETER_STATE_FLASH);
+        if (!commit_tmp_file(fp, tmp_db, RMETER_STATE_FLASH)) write_err = true;
     }
-    g_flash_dirty = false;
+
+    if (write_err) {
+        pthread_mutex_lock(&g_lock);
+        g_flash_dirty = true;
+        pthread_mutex_unlock(&g_lock);
+    }
+
+    free(snap_cfg);
+    free(snap_devs);
 }
 
 void meter_init(void) {
@@ -337,6 +462,38 @@ static void discover_clients(time_t now) {
         }
         pclose(iw);
     }
+
+    if (now - s_last_wifi_meta >= 15) {
+        s_last_wifi_meta = now;
+        FILE *iwi = popen("iwinfo wlan0 info 2>/dev/null", "r");
+        if (iwi) {
+            char line[256];
+            bool saw_any = false;
+            while (fgets(line, sizeof(line), iwi)) {
+                saw_any = true;
+                char *q = strstr(line, "ESSID: \"");
+                if (q) {
+                    q += 8;
+                    char *eq = strchr(q, '"');
+                    if (eq) {
+                        size_t len = (size_t)(eq - q);
+                        if (len >= sizeof(s_wifi_ssid)) len = sizeof(s_wifi_ssid) - 1;
+                        memcpy(s_wifi_ssid, q, len);
+                        s_wifi_ssid[len] = '\0';
+                    }
+                }
+                char *ch = strstr(line, "Channel: ");
+                if (ch) {
+                    int cnum = 0;
+                    if (sscanf(ch + 9, "%d", &cnum) == 1 && cnum > 0) {
+                        snprintf(s_wifi_chan, sizeof(s_wifi_chan), "%d", cnum);
+                    }
+                }
+            }
+            s_wifi_disabled = !saw_any;
+            pclose(iwi);
+        }
+    }
 }
 
 void meter_tick(double dt_sec) {
@@ -357,16 +514,24 @@ void meter_tick(double dt_sec) {
     }
 
     fw_read_counters(g_devices, g_device_count);
+    uint64_t ipt_now_ns = monotonic_ns();
+    double ipt_dt = (s_prev_ipt_ns > 0 && ipt_now_ns > s_prev_ipt_ns)
+                        ? ((double)(ipt_now_ns - s_prev_ipt_ns) / 1e9)
+                        : dt_sec;
+    if (ipt_dt < 0.05) ipt_dt = 0.05;
+    s_prev_ipt_ns = ipt_now_ns;
 
+    uint64_t total_raw_bytes = 0;
     for (int i = 0; i < g_device_count; i++) {
         uint64_t du = (g_devices[i].up_bytes >= prev_up[i]) ? (g_devices[i].up_bytes - prev_up[i]) : 0;
         uint64_t dd = (g_devices[i].down_bytes >= prev_down[i]) ? (g_devices[i].down_bytes - prev_down[i]) : 0;
+        total_raw_bytes += g_devices[i].up_bytes + g_devices[i].down_bytes;
 
-        uint32_t inst_up = (uint32_t)(((double)du * 8.0) / dt_sec);
-        uint32_t inst_dn = (uint32_t)(((double)dd * 8.0) / dt_sec);
+        uint32_t inst_up = calc_clamped_bps(du, ipt_dt);
+        uint32_t inst_dn = calc_clamped_bps(dd, ipt_dt);
 
-        g_devices[i].cur_up_bps = (inst_up > 0) ? ((g_devices[i].cur_up_bps + inst_up * 3) / 4) : (g_devices[i].cur_up_bps / 2);
-        g_devices[i].cur_down_bps = (inst_dn > 0) ? ((g_devices[i].cur_down_bps + inst_dn * 3) / 4) : (g_devices[i].cur_down_bps / 2);
+        g_devices[i].cur_up_bps = smooth_bps(g_devices[i].cur_up_bps, inst_up);
+        g_devices[i].cur_down_bps = smooth_bps(g_devices[i].cur_down_bps, inst_dn);
 
         if (du > 0 || dd > 0) {
             if (!g_devices[i].online || g_devices[i].connected_at == 0) g_devices[i].connected_at = now;
@@ -392,18 +557,32 @@ void meter_tick(double dt_sec) {
         }
     }
 
-    /* Total WAN speed */
+    /* Mark flash dirty periodically as traffic accumulates so sudden power loss loses <= 10 min */
+    if (total_raw_bytes < s_last_saved_raw_bytes) {
+        s_last_saved_raw_bytes = total_raw_bytes;
+    } else if (total_raw_bytes - s_last_saved_raw_bytes >= 1048576ULL) {
+        s_last_saved_raw_bytes = total_raw_bytes;
+        g_flash_dirty = true;
+    }
+
+    /* Total WAN speed measured with exact monotonic timestamp directly at sysfs read */
     char p_rx[96], p_tx[96];
     snprintf(p_rx, sizeof(p_rx), "/sys/class/net/%s/statistics/rx_bytes", g_wan_if);
     snprintf(p_tx, sizeof(p_tx), "/sys/class/net/%s/statistics/tx_bytes", g_wan_if);
     uint64_t rx = 0, tx = 0;
     if (read_sys_u64(p_rx, &rx) && read_sys_u64(p_tx, &tx)) {
-        if (s_wan_init && rx >= s_prev_wan_rx && tx >= s_prev_wan_tx) {
-            g_total_down_bps = (uint32_t)(((double)(rx - s_prev_wan_rx) * 8.0) / dt_sec);
-            g_total_up_bps   = (uint32_t)(((double)(tx - s_prev_wan_tx) * 8.0) / dt_sec);
+        uint64_t wan_now_ns = monotonic_ns();
+        if (s_wan_init && rx >= s_prev_wan_rx && tx >= s_prev_wan_tx && s_prev_wan_ns > 0 && wan_now_ns > s_prev_wan_ns) {
+            double wan_dt = (double)(wan_now_ns - s_prev_wan_ns) / 1e9;
+            if (wan_dt < 0.05) wan_dt = 0.05;
+            uint32_t inst_dn = calc_clamped_bps(rx - s_prev_wan_rx, wan_dt);
+            uint32_t inst_up = calc_clamped_bps(tx - s_prev_wan_tx, wan_dt);
+            g_total_down_bps = smooth_bps(g_total_down_bps, inst_dn);
+            g_total_up_bps   = smooth_bps(g_total_up_bps, inst_up);
         }
         s_prev_wan_rx = rx;
         s_prev_wan_tx = tx;
+        s_prev_wan_ns = wan_now_ns;
         s_wan_init = true;
     }
 
@@ -466,11 +645,28 @@ void meter_write_ram_json(void) {
     FILE *fp = fopen(tmp, "w");
     if (fp) {
         uint64_t total_used = meter_total_used_bytes();
-        char esc_tok[192], esc_ids[320], esc_thr[96], esc_ota[384];
+        char esc_tok[192], esc_ids[320], esc_thr[96], esc_ota[384], esc_ssid[128];
         json_escape(g_config.tg_token, esc_tok, sizeof(esc_tok));
         json_escape(g_config.tg_admin_ids, esc_ids, sizeof(esc_ids));
         json_escape(g_config.tg_thresholds, esc_thr, sizeof(esc_thr));
         json_escape(g_config.ota_version_url, esc_ota, sizeof(esc_ota));
+        json_escape(s_wifi_ssid, esc_ssid, sizeof(esc_ssid));
+
+        int wifi_clients = 0;
+        for (int i = 0; i < g_device_count; i++) {
+            if (g_devices[i].online && g_devices[i].is_wifi) wifi_clients++;
+        }
+
+        char rtime_str[72] = "غير متزامن";
+        bool time_synced = false;
+        time_t local_t = now + (time_t)g_config.auto_reboot_tz * 3600;
+        struct tm tm_val;
+        if (gmtime_r(&local_t, &tm_val) && tm_val.tm_year + 1900 >= 2024) {
+            time_synced = true;
+            snprintf(rtime_str, sizeof(rtime_str), "%04d-%02d-%02d %02d:%02d:%02d",
+                     tm_val.tm_year + 1900, tm_val.tm_mon + 1, tm_val.tm_mday,
+                     tm_val.tm_hour, tm_val.tm_min, tm_val.tm_sec);
+        }
 
         fprintf(fp, "{\n");
         fprintf(fp, "  \"fw_version\": \"%s\",\n", g_config.fw_version);
@@ -478,6 +674,14 @@ void meter_write_ram_json(void) {
         fprintf(fp, "  \"uptime_s\": %lu,\n", uptime_s);
         fprintf(fp, "  \"ram_total_kb\": %lu,\n", ram_tot);
         fprintf(fp, "  \"ram_free_kb\": %lu,\n", ram_free);
+        fprintf(fp, "  \"observer_mode\": %s,\n", g_config.observer_mode_enabled ? "true" : "false");
+        fprintf(fp, "  \"ota_auto_check\": %s,\n", g_config.ota_auto_check_enabled ? "true" : "false");
+        fprintf(fp, "  \"time_synced\": %s,\n", time_synced ? "true" : "false");
+        fprintf(fp, "  \"router_time\": \"%s\",\n", rtime_str);
+        fprintf(fp, "  \"wifi_ssid\": \"%s\",\n", esc_ssid);
+        fprintf(fp, "  \"wifi_channel\": \"%s\",\n", s_wifi_chan);
+        fprintf(fp, "  \"wifi_disabled\": %s,\n", s_wifi_disabled ? "true" : "false");
+        fprintf(fp, "  \"wifi_clients\": %d,\n", wifi_clients);
         fprintf(fp, "  \"total_up_bps\": %u,\n", (unsigned)g_total_up_bps);
         fprintf(fp, "  \"total_down_bps\": %u,\n", (unsigned)g_total_down_bps);
         fprintf(fp, "  \"total_used_bytes\": %llu,\n", (unsigned long long)total_used);
@@ -502,6 +706,13 @@ void meter_write_ram_json(void) {
         fprintf(fp, "  \"tg_admin_ids\": \"%s\",\n", esc_ids);
         fprintf(fp, "  \"tg_thresholds\": \"%s\",\n", esc_thr);
         fprintf(fp, "  \"ota_version_url\": \"%s\",\n", esc_ota);
+        fprintf(fp, "  \"tg_alert_msgs\": [");
+        for (int a = 0; a < RMETER_MAX_THRESHOLDS; a++) {
+            char esc_msg[512];
+            json_escape(g_config.tg_alert_msgs[a], esc_msg, sizeof(esc_msg));
+            fprintf(fp, "\"%s\"%s", esc_msg, (a + 1 < RMETER_MAX_THRESHOLDS) ? "," : "");
+        }
+        fprintf(fp, "],\n");
         fprintf(fp, "  \"devices\": [\n");
 
         for (int i = 0; i < g_device_count; i++) {
@@ -707,4 +918,58 @@ void meter_reset_all_usage(void) {
     g_config.main_alert_flags = 0;
     g_flash_dirty = true;
     pthread_mutex_unlock(&g_lock);
+}
+
+void meter_set_tg_alert_msg(int slot, const char *msg) {
+    if (slot < 0 || slot >= RMETER_MAX_THRESHOLDS) return;
+    pthread_mutex_lock(&g_lock);
+    snprintf(g_config.tg_alert_msgs[slot], sizeof(g_config.tg_alert_msgs[slot]), "%s", msg ? msg : "");
+    g_flash_dirty = true;
+    pthread_mutex_unlock(&g_lock);
+}
+
+void meter_fmt_bytes_short(uint64_t b, char *out, size_t sz) {
+    double std = (g_config.gb_standard == 1000) ? 1000.0 : 1024.0;
+    double mb = (double)b / (std * std);
+    double gb = mb / std;
+    if (gb >= 1.0) snprintf(out, sz, "%.2f GB", gb);
+    else snprintf(out, sz, "%.1f MB", mb);
+}
+
+void meter_format_alert_template(const char *tmpl, const char *name, const char *ip,
+                                 unsigned pct, const char *used_str,
+                                 const char *quota_str, const char *rem_str,
+                                 char *out, size_t out_sz) {
+    if (!out || out_sz == 0) return;
+    if (!tmpl || !tmpl[0]) {
+        out[0] = '\0';
+        return;
+    }
+    char pct_buf[16];
+    snprintf(pct_buf, sizeof(pct_buf), "%u%%", pct);
+
+    size_t pos = 0;
+    const char *p = tmpl;
+    while (*p && pos + 1 < out_sz) {
+        const char *rep = NULL;
+        size_t adv = 0;
+        if (strncmp(p, "{name}", 6) == 0) { rep = name ? name : ""; adv = 6; }
+        else if (strncmp(p, "{ip}", 4) == 0) { rep = ip ? ip : ""; adv = 4; }
+        else if (strncmp(p, "{pct}", 5) == 0) { rep = pct_buf; adv = 5; }
+        else if (strncmp(p, "{used}", 6) == 0) { rep = used_str ? used_str : "0"; adv = 6; }
+        else if (strncmp(p, "{quota}", 7) == 0) { rep = quota_str ? quota_str : "0"; adv = 7; }
+        else if (strncmp(p, "{rem}", 5) == 0) { rep = rem_str ? rem_str : "0"; adv = 5; }
+
+        if (rep) {
+            size_t rlen = strlen(rep);
+            size_t avail = out_sz - 1 - pos;
+            if (rlen > avail) rlen = avail;
+            memcpy(out + pos, rep, rlen);
+            pos += rlen;
+            p += adv;
+        } else {
+            out[pos++] = *p++;
+        }
+    }
+    out[pos] = '\0';
 }

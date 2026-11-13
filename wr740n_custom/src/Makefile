@@ -1,6 +1,6 @@
 CC ?= gcc
 CFLAGS ?= -O2 -Wall -Wextra -std=gnu99
-LDFLAGS ?= -lpthread
+LDFLAGS ?= -lpthread -ldl
 
 SRCS = main.c meter.c firewall.c telegram.c json_util.c
 OBJS = $(SRCS:.c=.o)

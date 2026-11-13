@@ -211,7 +211,8 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
     } else if (strcmp(action, "reboot_now") == 0) {
         int64_t cd = 3;
         json_get_i64(req, "countdown_s", &cd);
-        if (cd < 0) cd = 0;
+        if (cd < -1) cd = -1;
+        if (cd > 86400) cd = 86400;
         meter_save_all();
         g_reboot_countdown = (int32_t)cd;
         meter_write_ram_json();
@@ -242,13 +243,42 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
         }
     } else if (strcmp(action, "ota_save") == 0) {
         char url[192] = {0};
-        if (json_get_str(req, "ota_version_url", url, sizeof(url))) {
+        bool auto_chk = true;
+        bool has_auto = json_get_bool(req, "ota_auto_check", &auto_chk);
+        bool has_url = json_get_str(req, "ota_version_url", url, sizeof(url));
+        if (has_url || has_auto) {
             pthread_mutex_lock(&g_lock);
-            snprintf(g_config.ota_version_url, sizeof(g_config.ota_version_url), "%s", url);
+            if (has_url) snprintf(g_config.ota_version_url, sizeof(g_config.ota_version_url), "%s", url);
+            if (has_auto) g_config.ota_auto_check_enabled = auto_chk;
             pthread_mutex_unlock(&g_lock);
             meter_save_all();
             meter_write_ram_json();
         }
+        snprintf(resp, resp_sz, "{\"ok\":true}");
+    } else if (strcmp(action, "sys_opts_save") == 0) {
+        bool obs = false, ota_auto = true;
+        pthread_mutex_lock(&g_lock);
+        if (json_get_bool(req, "observer_mode", &obs)) g_config.observer_mode_enabled = obs;
+        if (json_get_bool(req, "ota_auto_check", &ota_auto)) g_config.ota_auto_check_enabled = ota_auto;
+        pthread_mutex_unlock(&g_lock);
+        meter_save_all();
+        meter_write_ram_json();
+        snprintf(resp, resp_sz, "{\"ok\":true}");
+    } else if (strcmp(action, "tg_alerts_save") == 0) {
+        for (int i = 0; i < RMETER_MAX_THRESHOLDS; i++) {
+            char key[8];
+            char val[256] = {0};
+            snprintf(key, sizeof(key), "m%d", i);
+            if (json_get_str(req, key, val, sizeof(val))) {
+                meter_set_tg_alert_msg(i, val);
+            }
+        }
+        meter_save_all();
+        meter_write_ram_json();
+        snprintf(resp, resp_sz, "{\"ok\":true}");
+    } else if (strcmp(action, "flush_save") == 0) {
+        meter_save_all();
+        meter_write_ram_json();
         snprintf(resp, resp_sz, "{\"ok\":true}");
     } else {
         snprintf(resp, resp_sz, "{\"ok\":false,\"error\":\"unknown action\"}");
@@ -278,7 +308,7 @@ static void *ctrl_ipc_thread(void *arg) {
             if (errno == EINTR) continue;
             break;
         }
-        char req[2048] = {0};
+        char req[6144] = {0};
         ssize_t n = read(cli, req, sizeof(req) - 1);
         if (n > 0) {
             req[n] = '\0';
@@ -309,7 +339,6 @@ int main(void) {
 
     time_t last_tick = time(NULL);
     time_t last_save = last_tick;
-    time_t last_alert = last_tick;
     int last_reboot_day = -1;
 
     while (g_running) {
@@ -321,11 +350,6 @@ int main(void) {
 
         meter_tick(dt);
         meter_write_ram_json();
-
-        if (now - last_alert >= 5) {
-            last_alert = now;
-            telegram_check_alerts();
-        }
 
         if (g_flash_dirty && (now - last_save >= 600)) {
             meter_save_all();
@@ -352,6 +376,8 @@ int main(void) {
                     tm_val.tm_min == g_config.auto_reboot_min &&
                     last_reboot_day != tm_val.tm_yday) {
                     last_reboot_day = tm_val.tm_yday;
+                    FILE *rf = fopen(RMETER_SCHED_RB_FLAG, "w");
+                    if (rf) { fputs("1\n", rf); fclose(rf); }
                     meter_save_all();
                     sync();
                     system("reboot");
