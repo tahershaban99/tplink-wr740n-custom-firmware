@@ -36,9 +36,10 @@ typedef struct {
     uint64_t prev_ipt_down;    /* last raw iptables byte counter */
 
     bool online;
+    bool is_wifi;
     bool blocked;              /* manual block or quota-100% auto-block */
     bool auto_blocked;         /* blocked specifically due to 100% quota */
-    bool gaming_mode;          /* VIP DSCP EF priority */
+    bool gaming_mode;          /* VIP DSCP EF + HTB prio 1 */
 
     uint16_t alert_flags;      /* bitmask of sent threshold alerts */
     time_t last_seen;
@@ -47,6 +48,8 @@ typedef struct {
 
 typedef struct {
     uint64_t main_quota_bytes; /* 0 = unlimited */
+    uint32_t wan_down_kbps;    /* 0 = auto 100mbit default */
+    uint32_t wan_up_kbps;      /* 0 = auto 100mbit default */
     char start_date[12];       /* YYYY-MM-DD */
     char end_date[12];         /* YYYY-MM-DD */
     uint16_t period_days;

@@ -94,6 +94,7 @@ static int ensure_device(const char *mac, const char *ip, const char *hostname) 
     if (ip && ip[0] && strcmp(g_devices[idx].ip, ip) != 0) {
         snprintf(g_devices[idx].ip, sizeof(g_devices[idx].ip), "%s", ip);
         g_fw_dirty = true;
+        g_tc_dirty = true;
     }
     if (hostname && hostname[0] && strcmp(hostname, "*") != 0 && g_devices[idx].name[0] == '\0') {
         snprintf(g_devices[idx].name, sizeof(g_devices[idx].name), "%s", hostname);
@@ -134,6 +135,8 @@ void meter_load_all(void) {
             const char *k = line;
             const char *v = eq + 1;
             if (strcmp(k, "main_quota_bytes") == 0) g_config.main_quota_bytes = strtoull(v, NULL, 10);
+            else if (strcmp(k, "wan_down_kbps") == 0) g_config.wan_down_kbps = (uint32_t)strtoul(v, NULL, 10);
+            else if (strcmp(k, "wan_up_kbps") == 0) g_config.wan_up_kbps = (uint32_t)strtoul(v, NULL, 10);
             else if (strcmp(k, "start_date") == 0) snprintf(g_config.start_date, sizeof(g_config.start_date), "%s", v);
             else if (strcmp(k, "end_date") == 0) snprintf(g_config.end_date, sizeof(g_config.end_date), "%s", v);
             else if (strcmp(k, "period_days") == 0) g_config.period_days = (uint16_t)atoi(v);
@@ -206,6 +209,8 @@ void meter_save_all(void) {
     FILE *fp = fopen(tmp_cfg, "w");
     if (fp) {
         fprintf(fp, "main_quota_bytes=%llu\n", (unsigned long long)g_config.main_quota_bytes);
+        fprintf(fp, "wan_down_kbps=%u\n", (unsigned)g_config.wan_down_kbps);
+        fprintf(fp, "wan_up_kbps=%u\n", (unsigned)g_config.wan_up_kbps);
         fprintf(fp, "start_date=%s\n", g_config.start_date);
         fprintf(fp, "end_date=%s\n", g_config.end_date);
         fprintf(fp, "period_days=%u\n", (unsigned)g_config.period_days);
@@ -261,7 +266,7 @@ void meter_init(void) {
     fw_init();
     fw_ensure_device_rules(g_devices, g_device_count);
     fw_sync_blocks_and_vip(g_devices, g_device_count);
-    fw_apply_tc(g_devices, g_device_count, g_lan_if, g_wan_if);
+    fw_apply_tc(g_devices, g_device_count, g_lan_if, g_wan_if, g_config.wan_down_kbps, g_config.wan_up_kbps);
 }
 
 static bool read_sys_u64(const char *path, uint64_t *out) {
@@ -275,7 +280,11 @@ static bool read_sys_u64(const char *path, uint64_t *out) {
 }
 
 static void discover_clients(time_t now) {
-    /* 1. /tmp/dhcp.leases: expiry mac ip name clientid */
+    for (int i = 0; i < g_device_count; i++) {
+        g_devices[i].is_wifi = false;
+    }
+
+    /* 1. /tmp/dhcp.leases: expiry mac ip name clientid (metadata/IP only, not live presence) */
     FILE *fp = fopen("/tmp/dhcp.leases", "r");
     if (fp) {
         char line[256];
@@ -283,11 +292,7 @@ static void discover_clients(time_t now) {
             long long exp = 0;
             char mac[32] = {0}, ip[32] = {0}, name[64] = {0};
             if (sscanf(line, "%lld %31s %31s %63s", &exp, mac, ip, name) >= 3) {
-                int idx = ensure_device(mac, ip, name);
-                if (idx >= 0) {
-                    if (!g_devices[idx].online) g_devices[idx].connected_at = now;
-                    g_devices[idx].last_seen = now;
-                }
+                ensure_device(mac, ip, name);
             }
         }
         fclose(fp);
@@ -304,7 +309,7 @@ static void discover_clients(time_t now) {
                 if (strcmp(dev, g_lan_if) == 0 && strcmp(flags, "0x0") != 0) {
                     int idx = ensure_device(mac, ip, NULL);
                     if (idx >= 0) {
-                        if (!g_devices[idx].online) g_devices[idx].connected_at = now;
+                        if (!g_devices[idx].online || g_devices[idx].connected_at == 0) g_devices[idx].connected_at = now;
                         g_devices[idx].last_seen = now;
                     }
                 }
@@ -322,7 +327,8 @@ static void discover_clients(time_t now) {
             if (sscanf(line, "%17s", mac) == 1 && strlen(mac) == 17 && mac[2] == ':') {
                 int idx = ensure_device(mac, NULL, NULL);
                 if (idx >= 0) {
-                    if (!g_devices[idx].online) g_devices[idx].connected_at = now;
+                    g_devices[idx].is_wifi = true;
+                    if (!g_devices[idx].online || g_devices[idx].connected_at == 0) g_devices[idx].connected_at = now;
                     g_devices[idx].last_seen = now;
                 }
             }
@@ -361,9 +367,11 @@ void meter_tick(double dt_sec) {
         g_devices[i].cur_down_bps = (inst_dn > 0) ? ((g_devices[i].cur_down_bps + inst_dn * 3) / 4) : (g_devices[i].cur_down_bps / 2);
 
         if (du > 0 || dd > 0) {
+            if (!g_devices[i].online || g_devices[i].connected_at == 0) g_devices[i].connected_at = now;
             g_devices[i].last_seen = now;
         }
         g_devices[i].online = (g_devices[i].last_seen > 0 && (now - g_devices[i].last_seen) <= 60);
+        if (!g_devices[i].online) g_devices[i].connected_at = 0;
 
         /* Enforce per-device quota auto-block */
         if (g_devices[i].quota_bytes > 0) {
@@ -397,12 +405,21 @@ void meter_tick(double dt_sec) {
         s_wan_init = true;
     }
 
+    static time_t s_last_hook_check = 0;
+    if (now - s_last_hook_check >= 15) {
+        s_last_hook_check = now;
+        if (fw_check_hooks()) {
+            g_fw_dirty = true;
+            g_tc_dirty = true;
+        }
+    }
+
     if (g_fw_dirty) {
         fw_sync_blocks_and_vip(g_devices, g_device_count);
         g_fw_dirty = false;
     }
     if (g_tc_dirty) {
-        fw_apply_tc(g_devices, g_device_count, g_lan_if, g_wan_if);
+        fw_apply_tc(g_devices, g_device_count, g_lan_if, g_wan_if, g_config.wan_down_kbps, g_config.wan_up_kbps);
         g_tc_dirty = false;
     }
 
@@ -438,6 +455,7 @@ static void read_sys_stats(unsigned long *uptime_s, unsigned long *ram_total_kb,
 void meter_write_ram_json(void) {
     unsigned long uptime_s = 0, ram_tot = 0, ram_free = 0;
     read_sys_stats(&uptime_s, &ram_tot, &ram_free);
+    time_t now = time(NULL);
 
     char tmp[128];
     snprintf(tmp, sizeof(tmp), "%s.tmp", RMETER_STATE_RAM);
@@ -468,6 +486,8 @@ void meter_write_ram_json(void) {
         fprintf(fp, "  \"gb_standard\": %u,\n", (unsigned)g_config.gb_standard);
         fprintf(fp, "  \"scale_pct\": %u,\n", (unsigned)g_config.scale_pct);
         fprintf(fp, "  \"scale_mode\": %u,\n", (unsigned)g_config.scale_mode);
+        fprintf(fp, "  \"wan_down_kbps\": %u,\n", (unsigned)g_config.wan_down_kbps);
+        fprintf(fp, "  \"wan_up_kbps\": %u,\n", (unsigned)g_config.wan_up_kbps);
         fprintf(fp, "  \"auto_reboot_enabled\": %s,\n", g_config.auto_reboot_enabled ? "true" : "false");
         fprintf(fp, "  \"auto_reboot_hour\": %u,\n", (unsigned)g_config.auto_reboot_hour);
         fprintf(fp, "  \"auto_reboot_min\": %u,\n", (unsigned)g_config.auto_reboot_min);
@@ -489,14 +509,15 @@ void meter_write_ram_json(void) {
             json_escape(d->tg_chat_id, esc_chat, sizeof(esc_chat));
             uint64_t su = meter_scaled_bytes(d->up_bytes);
             uint64_t sd = meter_scaled_bytes(d->down_bytes);
+            long long conn_s = (d->online && d->connected_at > 0 && now >= d->connected_at) ? (long long)(now - d->connected_at) : 0;
 
             fprintf(fp,
                     "    {\"mac\":\"%s\",\"ip\":\"%s\",\"bound_ip\":\"%s\",\"name\":\"%s\","
                     "\"up_bytes\":%llu,\"down_bytes\":%llu,\"quota_bytes\":%llu,"
                     "\"cap_up_kbps\":%u,\"cap_down_kbps\":%u,"
                     "\"cur_up_bps\":%u,\"cur_down_bps\":%u,"
-                    "\"online\":%s,\"blocked\":%s,\"auto_blocked\":%s,\"gaming_mode\":%s,"
-                    "\"tg_chat_id\":\"%s\",\"last_seen\":%lld}%s\n",
+                    "\"online\":%s,\"blocked\":%s,\"auto_blocked\":%s,\"gaming_mode\":%s,\"is_wifi\":%s,"
+                    "\"connected_s\":%lld,\"tg_chat_id\":\"%s\",\"last_seen\":%lld}%s\n",
                     d->mac, d->ip, d->bound_ip, esc_name,
                     (unsigned long long)su, (unsigned long long)sd, (unsigned long long)d->quota_bytes,
                     (unsigned)d->cap_up_kbps, (unsigned)d->cap_down_kbps,
@@ -505,7 +526,8 @@ void meter_write_ram_json(void) {
                     d->blocked ? "true" : "false",
                     d->auto_blocked ? "true" : "false",
                     d->gaming_mode ? "true" : "false",
-                    esc_chat, (long long)d->last_seen,
+                    d->is_wifi ? "true" : "false",
+                    conn_s, esc_chat, (long long)d->last_seen,
                     (i + 1 < g_device_count) ? "," : "");
         }
         fprintf(fp, "  ]\n}\n");

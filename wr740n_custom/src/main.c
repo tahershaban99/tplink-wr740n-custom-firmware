@@ -96,8 +96,17 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
         if (json_get_bool(req, "gaming_mode", &g)) meter_set_device_gaming(mac, g);
         if (json_get_str(req, "tg_chat_id", chat, sizeof(chat))) meter_set_device_telegram(mac, chat);
         if (json_get_str(req, "bound_ip", bound_ip, sizeof(bound_ip))) {
+            char cur_name[48] = {0};
+            if (name[0]) {
+                snprintf(cur_name, sizeof(cur_name), "%s", name);
+            } else {
+                pthread_mutex_lock(&g_lock);
+                int idx = meter_find_by_mac_or_ip(mac);
+                if (idx >= 0) snprintf(cur_name, sizeof(cur_name), "%s", g_devices[idx].name);
+                pthread_mutex_unlock(&g_lock);
+            }
             meter_set_device_binding(mac, bound_ip);
-            sync_static_lease_uci(mac, bound_ip, name);
+            sync_static_lease_uci(mac, bound_ip, cur_name);
         }
         meter_save_all();
         meter_write_ram_json();
@@ -139,7 +148,7 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
         if (ok) { meter_save_all(); meter_write_ram_json(); }
         snprintf(resp, resp_sz, "{\"ok\":%s}", ok ? "true" : "false");
     } else if (strcmp(action, "main_quota") == 0) {
-        uint64_t mq = 0, pd = 30;
+        uint64_t mq = 0, pd = 30, wdl = 0, wul = 0;
         char sd[16] = {0}, ed[16] = {0};
         pthread_mutex_lock(&g_lock);
         if (json_get_u64(req, "main_quota_bytes", &mq)) {
@@ -149,6 +158,14 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
         if (json_get_str(req, "start_date", sd, sizeof(sd))) snprintf(g_config.start_date, sizeof(g_config.start_date), "%s", sd);
         if (json_get_str(req, "end_date", ed, sizeof(ed))) snprintf(g_config.end_date, sizeof(g_config.end_date), "%s", ed);
         if (json_get_u64(req, "period_days", &pd)) g_config.period_days = (uint16_t)pd;
+        if (json_get_u64(req, "wan_down_kbps", &wdl)) {
+            g_config.wan_down_kbps = (uint32_t)wdl;
+            g_tc_dirty = true;
+        }
+        if (json_get_u64(req, "wan_up_kbps", &wul)) {
+            g_config.wan_up_kbps = (uint32_t)wul;
+            g_tc_dirty = true;
+        }
         pthread_mutex_unlock(&g_lock);
         meter_save_all();
         meter_write_ram_json();

@@ -13,9 +13,12 @@ void fw_init(void) {}
 void fw_ensure_device_rules(rmeter_device_t *devs, int count) { (void)devs; (void)count; }
 void fw_read_counters(rmeter_device_t *devs, int count) { (void)devs; (void)count; }
 void fw_sync_blocks_and_vip(rmeter_device_t *devs, int count) { (void)devs; (void)count; }
-void fw_apply_tc(rmeter_device_t *devs, int count, const char *lan_if, const char *wan_if) {
+void fw_apply_tc(rmeter_device_t *devs, int count, const char *lan_if, const char *wan_if,
+                 uint32_t wan_dl_kbps, uint32_t wan_ul_kbps) {
     (void)devs; (void)count; (void)lan_if; (void)wan_if;
+    (void)wan_dl_kbps; (void)wan_ul_kbps;
 }
+bool fw_check_hooks(void) { return false; }
 
 static void test_json_util(void) {
     const char *j = "{\"action\":\"device_save\",\"mac\":\"AA:BB:CC:DD:EE:FF\","
@@ -81,9 +84,17 @@ static void test_meter_scaling_and_quota(void) {
     assert(!g_devices[0].blocked && !g_devices[0].auto_blocked);
 
     assert(meter_set_device_gaming("11:22:33:44:55:66", true));
-    assert(g_devices[0].gaming_mode);
+    assert(g_devices[0].gaming_mode && g_fw_dirty && g_tc_dirty);
+    g_fw_dirty = false; g_tc_dirty = false;
     assert(meter_set_device_speed_cap("11:22:33:44:55:66", 2000, 5000));
     assert(g_devices[0].cap_up_kbps == 2000 && g_devices[0].cap_down_kbps == 5000);
+    assert(g_tc_dirty);
+
+    /* Verify binding, telegram, reset & delete */
+    assert(meter_set_device_binding("11:22:33:44:55:66", "192.168.1.55"));
+    assert(strcmp(g_devices[0].bound_ip, "192.168.1.55") == 0);
+    assert(meter_set_device_telegram("11:22:33:44:55:66", "123456789"));
+    assert(strcmp(g_devices[0].tg_chat_id, "123456789") == 0);
     assert(meter_reset_device_usage("11:22:33:44:55:66"));
     assert(g_devices[0].up_bytes == 0 && g_devices[0].down_bytes == 0);
     assert(meter_delete_device("11:22:33:44:55:66"));

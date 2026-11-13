@@ -4,11 +4,13 @@
 #include "rmeter.h"
 
 void fw_init(void);
+bool fw_check_hooks(void);
 void fw_detect_wan_if(char *out_if, size_t sz);
 void fw_ensure_device_rules(rmeter_device_t *devs, int count);
 void fw_read_counters(rmeter_device_t *devs, int count);
 void fw_sync_blocks_and_vip(rmeter_device_t *devs, int count);
-void fw_apply_tc(rmeter_device_t *devs, int count, const char *lan_if, const char *wan_if);
+void fw_apply_tc(rmeter_device_t *devs, int count, const char *lan_if, const char *wan_if,
+                 uint32_t wan_dl_kbps, uint32_t wan_ul_kbps);
 
 #endif /* FIREWALL_H */
 

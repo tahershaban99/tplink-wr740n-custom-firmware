@@ -4,3 +4,4 @@
 *.h text eol=lf
 wr740n_custom/files/** text eol=lf
 *.bin binary
+

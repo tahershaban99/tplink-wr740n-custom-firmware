@@ -63,6 +63,15 @@ void fw_init(void) {
     run_cmd("iptables -t mangle -C FORWARD -j RMETER_VIP 2>/dev/null || iptables -t mangle -I FORWARD 1 -j RMETER_VIP 2>/dev/null");
 }
 
+bool fw_check_hooks(void) {
+    if (run_cmd("iptables -C FORWARD -j RMETER_BLK 2>/dev/null") != 0 ||
+        run_cmd("iptables -t mangle -C FORWARD -j RMETER_VIP 2>/dev/null") != 0) {
+        fw_init();
+        return true;
+    }
+    return false;
+}
+
 static bool chain_has_ip(const char *chain, const char *ip, bool is_src) {
     char cmd[192];
     snprintf(cmd, sizeof(cmd), "iptables -C %s %s %s -j RETURN 2>/dev/null",
@@ -169,17 +178,80 @@ void fw_sync_blocks_and_vip(rmeter_device_t *devs, int count) {
     }
 }
 
-void fw_apply_tc(rmeter_device_t *devs, int count, const char *lan_if, const char *wan_if) {
-    bool any_dl_cap = false;
-    bool any_ul_cap = false;
+/* Configure HTB root/default/per-device QoS for one direction (DL=true on lan_if, DL=false on wan_if) */
+static void apply_dir_htb(rmeter_device_t *devs, int count, const char *ifname,
+                          uint32_t root_kbps, bool is_dl) {
+    int major = is_dl ? 1 : 2;
+    uint32_t def_rate = (root_kbps * 30U) / 100U;
+    if (def_rate < 100) def_rate = 100;
+    char cmd[512];
+
+    if (!is_dl) {
+        run_cmd("iptables -t mangle -N RMETER_MARK 2>/dev/null || iptables -t mangle -F RMETER_MARK 2>/dev/null");
+        run_cmd("iptables -t mangle -C FORWARD -j RMETER_MARK 2>/dev/null || iptables -t mangle -A FORWARD -j RMETER_MARK 2>/dev/null");
+    }
+
+    snprintf(cmd, sizeof(cmd),
+             "tc qdisc add dev %s root handle %d: htb default 999 r2q 25 2>/dev/null && "
+             "tc class add dev %s parent %d: classid %d:1 htb rate %ukbit ceil %ukbit && "
+             "tc class add dev %s parent %d:1 classid %d:999 htb rate %ukbit ceil %ukbit prio 3",
+             ifname, major, ifname, major, major, root_kbps, root_kbps,
+             ifname, major, major, def_rate, root_kbps);
+    if (run_cmd(cmd) != 0) return;
+
+    snprintf(cmd, sizeof(cmd), "tc qdisc add dev %s parent %d:999 handle 999: fq_codel 2>/dev/null || true",
+             ifname, major);
+    run_cmd(cmd);
+
+    for (int i = 0; i < count; i++) {
+        if (devs[i].blocked || !ip_valid(devs[i].ip)) continue;
+        uint32_t cap = is_dl ? devs[i].cap_down_kbps : devs[i].cap_up_kbps;
+        if (cap == 0 && !devs[i].gaming_mode) continue;
+
+        unsigned int cid = 0x10U + (unsigned int)i;
+        uint32_t ceil_k = (cap > 0 && cap < root_kbps) ? cap : (cap > 0 ? cap : root_kbps);
+        uint32_t rate_k = (cap > 0) ? cap : ((root_kbps * 70U) / 100U);
+        if (rate_k < 64) rate_k = 64;
+        if (rate_k > ceil_k) rate_k = ceil_k;
+        int prio = devs[i].gaming_mode ? 1 : 3;
+
+        if (is_dl) {
+            snprintf(cmd, sizeof(cmd),
+                     "tc class add dev %s parent %d:1 classid %d:%x htb rate %ukbit ceil %ukbit prio %d && "
+                     "tc filter add dev %s protocol ip parent %d:0 prio 1 u32 match ip dst %s/32 flowid %d:%x",
+                     ifname, major, major, cid, rate_k, ceil_k, prio,
+                     ifname, major, devs[i].ip, major, cid);
+        } else {
+            snprintf(cmd, sizeof(cmd),
+                     "iptables -t mangle -A RMETER_MARK -s %s -j MARK --set-mark 0x%x 2>/dev/null",
+                     devs[i].ip, cid);
+            run_cmd(cmd);
+            snprintf(cmd, sizeof(cmd),
+                     "tc class add dev %s parent %d:1 classid %d:%x htb rate %ukbit ceil %ukbit prio %d && "
+                     "tc filter add dev %s protocol ip parent %d:0 prio 1 handle 0x%x fw flowid %d:%x",
+                     ifname, major, major, cid, rate_k, ceil_k, prio,
+                     ifname, major, cid, major, cid);
+        }
+        run_cmd(cmd);
+        snprintf(cmd, sizeof(cmd),
+                 "tc qdisc add dev %s parent %d:%x handle %x: fq_codel 2>/dev/null || true",
+                 ifname, major, cid, cid);
+        run_cmd(cmd);
+    }
+}
+
+void fw_apply_tc(rmeter_device_t *devs, int count, const char *lan_if, const char *wan_if,
+                 uint32_t wan_dl_kbps, uint32_t wan_ul_kbps) {
+    bool any_dl_qos = false;
+    bool any_ul_qos = false;
     for (int i = 0; i < count; i++) {
         if (!devs[i].blocked && ip_valid(devs[i].ip)) {
-            if (devs[i].cap_down_kbps > 0) any_dl_cap = true;
-            if (devs[i].cap_up_kbps > 0) any_ul_cap = true;
+            if (devs[i].cap_down_kbps > 0 || devs[i].gaming_mode) any_dl_qos = true;
+            if (devs[i].cap_up_kbps > 0 || devs[i].gaming_mode) any_ul_qos = true;
         }
     }
 
-    char cmd[512];
+    char cmd[256];
     /* Always clear old qdiscs & upload marks first */
     snprintf(cmd, sizeof(cmd), "tc qdisc del dev %s root 2>/dev/null", lan_if);
     run_cmd(cmd);
@@ -187,66 +259,13 @@ void fw_apply_tc(rmeter_device_t *devs, int count, const char *lan_if, const cha
     run_cmd(cmd);
     run_cmd("iptables -t mangle -F RMETER_MARK 2>/dev/null");
 
-    /* If no caps set, keep native zero-overhead wire speed! */
-    if (any_dl_cap) {
-        snprintf(cmd, sizeof(cmd),
-                 "tc qdisc add dev %s root handle 1: htb default 999 2>/dev/null && "
-                 "tc class add dev %s parent 1: classid 1:1 htb rate 100mbit ceil 100mbit && "
-                 "tc class add dev %s parent 1:1 classid 1:999 htb rate 100mbit ceil 100mbit prio 2",
-                 lan_if, lan_if, lan_if);
-        if (run_cmd(cmd) == 0) {
-            snprintf(cmd, sizeof(cmd), "tc qdisc add dev %s parent 1:999 handle 999: fq_codel 2>/dev/null || true", lan_if);
-            run_cmd(cmd);
-            for (int i = 0; i < count; i++) {
-                if (!devs[i].blocked && ip_valid(devs[i].ip) && devs[i].cap_down_kbps > 0) {
-                    int cid = 10 + i;
-                    uint32_t rate = devs[i].cap_down_kbps;
-                    int prio = devs[i].gaming_mode ? 1 : 3;
-                    snprintf(cmd, sizeof(cmd),
-                             "tc class add dev %s parent 1:1 classid 1:%d htb rate %ukbit ceil %ukbit prio %d && "
-                             "tc filter add dev %s protocol ip parent 1:0 prio 1 u32 match ip dst %s/32 flowid 1:%d",
-                             lan_if, cid, rate, rate, prio,
-                             lan_if, devs[i].ip, cid);
-                    run_cmd(cmd);
-                    snprintf(cmd, sizeof(cmd), "tc qdisc add dev %s parent 1:%d handle %d: fq_codel 2>/dev/null || true", lan_if, cid, cid);
-                    run_cmd(cmd);
-                }
-            }
-        }
+    /* If no caps and no VIP devices active, keep native zero-overhead wire speed! */
+    if (any_dl_qos) {
+        uint32_t root_dl = (wan_dl_kbps >= 500) ? wan_dl_kbps : 100000U;
+        apply_dir_htb(devs, count, lan_if, root_dl, true);
     }
-
-    if (any_ul_cap) {
-        /* Note: On OpenWrt WAN egress, SNAT changes src IP, so mark packets pre-NAT in mangle FORWARD */
-        run_cmd("iptables -t mangle -N RMETER_MARK 2>/dev/null || iptables -t mangle -F RMETER_MARK 2>/dev/null");
-        run_cmd("iptables -t mangle -C FORWARD -j RMETER_MARK 2>/dev/null || iptables -t mangle -A FORWARD -j RMETER_MARK 2>/dev/null");
-
-        snprintf(cmd, sizeof(cmd),
-                 "tc qdisc add dev %s root handle 2: htb default 999 2>/dev/null && "
-                 "tc class add dev %s parent 2: classid 2:1 htb rate 100mbit ceil 100mbit && "
-                 "tc class add dev %s parent 2:1 classid 2:999 htb rate 100mbit ceil 100mbit prio 2",
-                 wan_if, wan_if, wan_if);
-        if (run_cmd(cmd) == 0) {
-            snprintf(cmd, sizeof(cmd), "tc qdisc add dev %s parent 2:999 handle 999: fq_codel 2>/dev/null || true", wan_if);
-            run_cmd(cmd);
-            for (int i = 0; i < count; i++) {
-                if (!devs[i].blocked && ip_valid(devs[i].ip) && devs[i].cap_up_kbps > 0) {
-                    int cid = 10 + i;
-                    uint32_t rate = devs[i].cap_up_kbps;
-                    int prio = devs[i].gaming_mode ? 1 : 3;
-                    snprintf(cmd, sizeof(cmd),
-                             "iptables -t mangle -A RMETER_MARK -s %s -j MARK --set-mark %d 2>/dev/null",
-                             devs[i].ip, cid);
-                    run_cmd(cmd);
-                    snprintf(cmd, sizeof(cmd),
-                             "tc class add dev %s parent 2:1 classid 2:%d htb rate %ukbit ceil %ukbit prio %d && "
-                             "tc filter add dev %s protocol ip parent 2:0 prio 1 handle %d fw flowid 2:%d",
-                             wan_if, cid, rate, rate, prio,
-                             wan_if, cid, cid);
-                    run_cmd(cmd);
-                    snprintf(cmd, sizeof(cmd), "tc qdisc add dev %s parent 2:%d handle %d: fq_codel 2>/dev/null || true", wan_if, cid, cid);
-                    run_cmd(cmd);
-                }
-            }
-        }
+    if (any_ul_qos) {
+        uint32_t root_ul = (wan_ul_kbps >= 256) ? wan_ul_kbps : 100000U;
+        apply_dir_htb(devs, count, wan_if, root_ul, false);
     }
 }
