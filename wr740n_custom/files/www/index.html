@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>لوحة تحكم الراوتر | RouterMeter</title>
+<style>
+:root{
+  --bg:#0d090b;--bg2:#171015;--glass:rgba(30,20,26,.72);--card:rgba(255,255,255,.045);
+  --brd:rgba(255,255,255,.1);--txt:#f8f4f6;--muted:#b29da6;
+  --pri:#e11d48;--pri2:#fb7185;--acc:#38bdf8;--ok:#10b981;--warn:#f59e0b;--err:#ef4444;--vip:#a855f7;
+  --r:14px;--sh:0 10px 30px rgba(0,0,0,.45);
+}
+[data-theme="sunset"]{
+  --bg:#0b0f19;--bg2:#161224;--glass:rgba(24,20,38,.74);--pri:#f43f5e;--pri2:#fb923c;--acc:#38bdf8;
+}
+[data-theme="cyber"]{
+  --bg:#061014;--bg2:#091c22;--glass:rgba(10,28,34,.75);--pri:#06b6d4;--pri2:#22d3ee;--acc:#10b981;
+}
+[data-theme="light"]{
+  --bg:#f1f5f9;--bg2:#e2e8f0;--glass:rgba(255,255,255,.85);--card:rgba(15,23,42,.04);
+  --brd:rgba(15,23,42,.12);--txt:#0f172a;--muted:#475569;--pri:#e11d48;--pri2:#be123c;--acc:#0284c7;
+  --sh:0 8px 24px rgba(15,23,42,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
+body{background:radial-gradient(circle at 12% 10%,rgba(225,29,72,.16),transparent 42%),radial-gradient(circle at 88% 85%,rgba(56,189,248,.12),transparent 45%),linear-gradient(160deg,var(--bg),var(--bg2));color:var(--txt);min-height:100vh;line-height:1.5;overflow-x:hidden}
+a{color:var(--acc)}
+button,input,select{font:inherit;color:inherit}
+.wrap{max-width:1260px;margin:0 auto;padding:14px}
+.hdr{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--brd);border-radius:var(--r);padding:12px 16px;box-shadow:var(--sh);margin-bottom:14px}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--pri),var(--pri2));display:grid;place-items:center;font-weight:800;color:#fff;font-size:18px;box-shadow:0 4px 16px rgba(225,29,72,.35)}
+.brand h1{font-size:17px;font-weight:700}
+.brand small{display:block;font-size:11px;color:var(--muted)}
+.hdr-ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;background:var(--card);border:1px solid var(--brd);font-size:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.dot.off{background:var(--err);box-shadow:0 0 8px var(--err)}
+.btn{cursor:pointer;border:1px solid var(--brd);background:var(--card);padding:8px 13px;border-radius:10px;font-size:13px;font-weight:600;transition:.18s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn:hover{transform:translateY(-1px);border-color:var(--pri2)}
+.btn.pri{background:linear-gradient(135deg,var(--pri),var(--pri2));border-color:transparent;color:#fff}
+.btn.ok{background:rgba(16,185,129,.18);border-color:rgba(16,185,129,.45);color:#34d399}
+.btn.warn{background:rgba(245,158,11,.16);border-color:rgba(245,158,11,.4);color:#fbbf24}
+.btn.err{background:rgba(239,68,68,.16);border-color:rgba(239,68,68,.4);color:#f87171}
+.btn.vip{background:rgba(168,85,247,.18);border-color:rgba(168,85,247,.45);color:#c084fc}
+.btn.sm{padding:5px 9px;font-size:12px;border-radius:8px}
+.tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px}
+.tab{cursor:pointer;white-space:nowrap;padding:9px 15px;border-radius:11px;background:var(--glass);border:1px solid var(--brd);font-size:13px;font-weight:600;color:var(--muted);transition:.18s}
+.tab.active{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;border-color:transparent;box-shadow:0 4px 14px rgba(225,29,72,.3)}
+.panel{display:none}.panel.active{display:block}
+.grid{display:grid;gap:12px}
+.g4{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.g2{grid-template-columns:repeat(auto-fit,minmax(310px,1fr))}
+.card{background:var(--glass);backdrop-filter:blur(12px);border:1px solid var(--brd);border-radius:var(--r);padding:15px;box-shadow:var(--sh)}
+.stat-lbl{font-size:12px;color:var(--muted);margin-bottom:4px}
+.stat-val{font-size:23px;font-weight:800;letter-spacing:-.3px}
+.stat-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.bar{height:8px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:8px}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--pri2));transition:width .35s}
+.bar.ok>i{background:linear-gradient(90deg,#059669,#34d399)}
+.bar.warn>i{background:linear-gradient(90deg,#d97706,#fbbf24)}
+.bar.err>i{background:linear-gradient(90deg,#dc2626,#f87171)}
+.sec-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.sec-h h2{font-size:16px;font-weight:700}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.inp,select{background:var(--card);border:1px solid var(--brd);border-radius:9px;padding:8px 11px;font-size:13px;outline:none;width:100%}
+.inp:focus,select:focus{border-color:var(--pri2)}
+select option{background:#1a1518;color:#fff}
+.dev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(295px,1fr));gap:12px}
+.dev{background:var(--glass);border:1px solid var(--brd);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px;position:relative;transition:.18s}
+.dev.blocked{border-color:rgba(239,68,68,.5);background:linear-gradient(180deg,rgba(239,68,68,.08),var(--glass))}
+.dev.vip{border-color:rgba(168,85,247,.5)}
+.dev-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.dev-name{font-weight:700;font-size:15px;word-break:break-word}
+.dev-meta{font-size:11.5px;color:var(--muted);font-family:monospace}
+.badges{display:flex;flex-wrap:wrap;gap:5px}
+.bdg{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600;border:1px solid transparent}
+.bdg.on{background:rgba(16,185,129,.16);color:#34d399;border-color:rgba(16,185,129,.35)}
+.bdg.off{background:rgba(148,163,184,.12);color:var(--muted);border-color:var(--brd)}
+.bdg.blk{background:rgba(239,68,68,.18);color:#f87171;border-color:rgba(239,68,68,.4)}
+.bdg.vip{background:rgba(168,85,247,.2);color:#d8b4fe;border-color:rgba(168,85,247,.45)}
+.bdg.cap{background:rgba(245,158,11,.18);color:#fbbf24;border-color:rgba(245,158,11,.4)}
+.spd-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--card);border-radius:10px;padding:8px 10px;font-size:12.5px}
+.spd-row b{display:block;font-size:14px}
+.acts{display:flex;flex-wrap:wrap;gap:6px}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:10px 8px;border-bottom:1px solid var(--brd);text-align:right;white-space:nowrap}
+th{color:var(--muted);font-size:12px;font-weight:600}
+canvas{width:100%;height:190px;display:block;border-radius:10px;background:var(--card)}
+.fg{margin-bottom:11px}
+.fg label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600}
+.chk{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin:8px 0}
+.chk input{width:16px;height:16px;accent-color:var(--pri)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+.modal-bg.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--brd);border-radius:16px;padding:18px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.6)}
+.toast{position:fixed;bottom:18px;left:18px;background:var(--bg2);border:1px solid var(--pri2);color:var(--txt);padding:10px 16px;border-radius:11px;font-size:13px;font-weight:600;box-shadow:var(--sh);z-index:99;display:none}
+.banner{background:linear-gradient(90deg,#b91c1c,#f59e0b);color:#fff;padding:9px 14px;border-radius:10px;margin-bottom:12px;font-weight:700;text-align:center;display:none}
+.login-box{max-width:370px;margin:10vh auto;background:var(--glass);border:1px solid var(--brd);border-radius:18px;padding:24px;box-shadow:var(--sh);text-align:center}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<div id="loginView" class="login-box hide">
+  <div class="logo" style="margin:0 auto 12px;width:52px;height:52px;font-size:24px">R</div>
+  <h2 style="margin-bottom:6px">RouterMeter OS</h2>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:18px">لوحة إدارة السرعات والباقات — TL-WR740N v4</p>
+  <form id="loginForm">
+    <div class="fg" style="text-align:right"><label>اسم المستخدم</label><input class="inp" id="lUser" value="admin" required></div>
+    <div class="fg" style="text-align:right"><label>كلمة المرور</label><input class="inp" id="lPass" type="password" value="admin" required></div>
+    <div id="loginErr" style="color:#f87171;font-size:12.5px;margin-bottom:10px"></div>
+    <button class="btn pri" style="width:100%" type="submit">دخول</button>
+  </form>
+</div>
+
+<div id="appView" class="wrap hide">
+  <div id="rebootBanner" class="banner"></div>
+  <header class="hdr">
+    <div class="brand">
+      <div class="logo">R</div>
+      <div>
+        <h1>راوتر ميتر <span id="fwVer" style="font-size:11px;color:var(--pri2)">v1.0</span></h1>
+        <small>TP-Link TL-WR740N v4 • <span id="hdrWan">wan</span> • <span id="hdrUp">0s</span></small>
+      </div>
+    </div>
+    <div class="hdr-ctrl">
+      <span class="pill"><span id="connDot" class="dot"></span><span id="connTxt">متصل</span></span>
+      <select id="themeSel" style="width:auto;padding:5px 9px;font-size:12px">
+        <option value="">قرمزي داكن</option>
+        <option value="sunset">غروب كوني</option>
+        <option value="cyber">سايبر ماتريكس</option>
+        <option value="light">نهاري زجاجي</option>
+      </select>
+      <button class="btn sm err" onclick="doLogout()">خروج</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="navTabs">
+    <button class="tab active" data-t="dash">لوحة التحكم والأجهزة</button>
+    <button class="tab" data-t="quota">الباقة والمعايرة</button>
+    <button class="tab" data-t="net">الوايفاي والإنترنت</button>
+    <button class="tab" data-t="tg">بوت تليجرام</button>
+    <button class="tab" data-t="sys">المراقبة والتحديث OTA</button>
+  </nav>
+
+  <!-- TAB 1: DASHBOARD -->
+  <section id="tab-dash" class="panel active">
+    <div class="grid g4" style="margin-bottom:12px">
+      <div class="card">
+        <div class="stat-lbl">سرعة التحميل الكلية</div>
+        <div class="stat-val" id="sDown" style="color:var(--acc)">0 Kbps</div>
+        <div class="stat-sub">ذروة الجلسة: <span id="sPeakD">0 Kbps</span></div>
+      </div>
+      <div class="card">
+        <div class="stat-lbl">سرعة الرفع الكلية</div>
+        <div class="stat-val" id="sUp" style="color:var(--pri2)">0 Kbps</div>
+        <div class="stat-sub">ذروة الجلسة: <span id="sPeakU">0 Kbps</span></div>
+      </div>
+      <div class="card">
+        <div class="stat-lbl">إجمالي استهلاك الباقة</div>
+        <div class="stat-val" id="sUsed">0 GB</div>
+        <div class="stat-sub" id="sMainQ">من غير محدود</div>
+        <div class="bar" id="mainBar"><i style="width:0%"></i></div>
+      </div>
+      <div class="card">
+        <div class="stat-lbl">الأجهزة المتصلة / الرام</div>
+        <div class="stat-val"><span id="sOnline">0</span> <small style="font-size:14px;color:var(--muted)">/ <span id="sTotalDev">0</span></small></div>
+        <div class="stat-sub">رام متاحة: <span id="sRam">-</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <div class="sec-h" style="margin-bottom:8px">
+        <h2>مخطط السرعة المباشر (آخر 60 ثانية)</h2>
+        <span style="font-size:12px;color:var(--muted)">
+          <span style="color:var(--acc)">■ تحميل</span> &nbsp; <span style="color:var(--pri2)">■ رفع</span>
+        </span>
+      </div>
+      <canvas id="spdChart" width="900" height="190"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="sec-h">
+        <h2>الأجهزة المتصلة والمسجلة</h2>
+        <div class="filters">
+          <input class="inp" id="devSearch" placeholder="بحث بالاسم / IP / MAC" style="width:180px">
+          <select id="devFilter" style="width:auto">
+            <option value="all">الكل</option>
+            <option value="on">المتصلة الآن</option>
+            <option value="blk">المحظورة</option>
+            <option value="vip">VIP ألعاب</option>
+          </select>
+          <button class="btn sm" id="viewBtn" onclick="toggleView()">عرض جدول</button>
+          <button class="btn sm warn" onclick="resetAllUsage()">تصفير كل العدادات</button>
+        </div>
+      </div>
+      <div id="devCards" class="dev-grid"></div>
+      <div id="devTable" class="tbl-wrap hide">
+        <table>
+          <thead><tr><th>الجهاز</th><th>IP / MAC</th><th>الحالة</th><th>التحميل / الرفع</th><th>الاستهلاك / الكوتة</th><th>تحديد السرعة</th><th>إجراءات</th></tr></thead>
+          <tbody id="devTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 2: QUOTA & SCALE -->
+  <section id="tab-quota" class="panel">
+    <div class="grid g2">
+      <div class="card">
+        <div class="sec-h"><h2>إعدادات الباقة الرئيسية وفترة الفوترة</h2></div>
+        <div class="fg"><label>إجمالي الباقة بالجيجابايت (0 = بدون حد)</label><input class="inp" id="qMainGb" type="number" step="0.1" min="0"></div>
+        <div class="grid g2">
+          <div class="fg"><label>تاريخ البداية</label><input class="inp" id="qStart" type="date"></div>
+          <div class="fg"><label>تاريخ الانتهاء</label><input class="inp" id="qEnd" type="date"></div>
+        </div>
+        <div class="fg"><label>مدة الدورة (أيام)</label><input class="inp" id="qDays" type="number" min="1" max="365"></div>
+        <button class="btn pri" onclick="saveMainQuota()">حفظ إعدادات الباقة</button>
+      </div>
+      <div class="card">
+        <div class="sec-h"><h2>معايرة العداد (Standard & Scale)</h2></div>
+        <div class="fg"><label>معيار حساب الجيجابايت</label>
+          <select id="qStd">
+            <option value="1024">1024 MiB = 1 GiB (قياسي)</option>
+            <option value="1000">1000 MB = 1 GB (شركات الاتصالات)</option>
+          </select>
+        </div>
+        <div class="fg"><label>نسبة المعايرة (%): <b id="qPctLbl">100%</b> (لمطابقة فاتورة الشركة 50% - 200%)</label>
+          <input id="qPct" type="range" min="50" max="200" value="100" style="width:100%" oninput="document.getElementById('qPctLbl').textContent=this.value+'%'">
+        </div>
+        <div class="fg"><label>وضع المعايرة</label>
+          <select id="qMode">
+            <option value="0">تطبيق نسبة المعايرة (%)</option>
+            <option value="1">بدون تعديل (القراءة الخام 100%)</option>
+          </select>
+        </div>
+        <button class="btn pri" onclick="saveMeterScale()">حفظ المعايرة</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 3: NATIVE WIFI & WAN -->
+  <section id="tab-net" class="panel">
+    <div class="grid g2">
+      <div class="card">
+        <div class="sec-h"><h2>إعدادات الوايفاي الأصلية (ath9k)</h2><button class="btn sm" onclick="loadNetInfo()">تحديث</button></div>
+        <div class="fg"><label>اسم الشبكة (SSID)</label><input class="inp" id="wSsid"></div>
+        <div class="fg"><label>كلمة مرور الوايفاي (8 أحرف فأكثر)</label><input class="inp" id="wKey" type="password"></div>
+        <div class="grid g2">
+          <div class="fg"><label>التشفير</label>
+            <select id="wEnc"><option value="psk2">WPA2-PSK (مستحسن)</option><option value="psk-mixed">WPA/WPA2 المختلط</option><option value="none">مفتوح</option></select>
+          </div>
+          <div class="fg"><label>القناة</label>
+            <select id="wChan"><option value="auto">تلقائي (Auto)</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option></select>
+          </div>
+        </div>
+        <div class="grid g2">
+          <div class="fg"><label>عرض النطاق</label><select id="wHt"><option value="HT40">40 MHz (أقصى سرعة 150Mbps)</option><option value="HT20">20 MHz (استقرار أعلى)</option></select></div>
+          <div class="fg"><label>قوة البث (dBm)</label><input class="inp" id="wTxp" placeholder="تلقائي (18 لأقصى قوة)"></div>
+        </div>
+        <div class="fg"><label>نطاق القنوات والطاقة (Country)</label>
+          <select id="wCountry">
+            <option value="JP">JP — أقصى طاقة 18 dBm + قنوات 12 و13 (مستحسن)</option>
+            <option value="TW">TW — طاقة 16 dBm + قنوات 12 و13</option>
+            <option value="US">US — طاقة 16 dBm (قنوات 1–11 فقط)</option>
+            <option value="EG">EG — مصر/أوروبا 13 dBm + قنوات 12 و13</option>
+          </select>
+        </div>
+        <label class="chk"><input type="checkbox" id="wDis"> تعطيل الوايفاي مؤقتاً</label>
+      </div>
+      <div class="card">
+        <div class="sec-h"><h2>إعدادات منفذ الإنترنت (WAN)</h2></div>
+        <div class="fg"><label>نوع الاتصال</label>
+          <select id="wanProto" onchange="toggleWanFields()">
+            <option value="dhcp">DHCP تلقائي (خلف راوتر/مودم)</option>
+            <option value="static">IP ثابت (Static)</option>
+            <option value="pppoe">PPPoE (اسم مستخدم وكلمة مرور)</option>
+          </select>
+        </div>
+        <div id="wanStatic" class="hide">
+          <div class="grid g2">
+            <div class="fg"><label>IP Address</label><input class="inp" id="wanIp"></div>
+            <div class="fg"><label>Netmask</label><input class="inp" id="wanMask" placeholder="255.255.255.0"></div>
+          </div>
+          <div class="fg"><label>Gateway</label><input class="inp" id="wanGw"></div>
+        </div>
+        <div id="wanPppoe" class="hide">
+          <div class="fg"><label>اسم مستخدم PPPoE</label><input class="inp" id="wanUser"></div>
+          <div class="fg"><label>كلمة مرور PPPoE</label><input class="inp" id="wanPass" type="password"></div>
+        </div>
+        <div class="fg"><label>DNS مخصص (اختياري، مثل 1.1.1.1 8.8.8.8)</label><input class="inp" id="wanDns"></div>
+        <button class="btn pri" style="width:100%;margin-top:8px" onclick="saveNetInfo()">حفظ وتطبيق إعدادات الشبكة</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 4: TELEGRAM BOT -->
+  <section id="tab-tg" class="panel">
+    <div class="grid g2">
+      <div class="card">
+        <div class="sec-h"><h2>إعدادات بوت تليجرام</h2></div>
+        <label class="chk"><input type="checkbox" id="tgEn"> تفعيل بوت تليجرام</label>
+        <label class="chk"><input type="checkbox" id="tgInter"> تفعيل الأوامر التفاعلية (Slash & أزرار)</label>
+        <div class="fg"><label>Bot Token (من @BotFather)</label><input class="inp" id="tgTok" placeholder="123456:ABC-DEF..."></div>
+        <div class="fg"><label>معرفات المشرفين Chat IDs (مفصولة بفاصلة)</label><input class="inp" id="tgIds" placeholder="123456789,987654321"></div>
+        <div class="fg"><label>نسب التنبيه المئوية (%)</label><input class="inp" id="tgThr" placeholder="50,75,90,95,100"></div>
+        <div class="acts">
+          <button class="btn pri" onclick="saveTg(false)">حفظ الإعدادات</button>
+          <button class="btn ok" onclick="saveTg(true)">حفظ وإرسال رسالة اختبار</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="sec-h"><h2>المستخدمون المكتشفون والأوامر المتاحة</h2></div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:8px">أي شخص يرسل <code>/start</code> أو <code>/id</code> للبوت سيظهر هنا لربطه بجهازه أو إضافته كمشرف:</p>
+        <div id="tgUsersList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
+        <div style="font-size:12px;color:var(--muted);background:var(--card);padding:10px;border-radius:10px;line-height:1.8">
+          <b>أوامر المشرفين:</b> <code>/status</code> الحالة، <code>/speed</code> السرعة المباشرة، <code>/quota</code> الباقة، <code>/devices</code> الأجهزة، <code>/block IP|MAC</code> حظر، <code>/unblock IP|MAC</code> فك، <code>/add IP|MAC 5</code> إضافة 5 جيجا، <code>/vip IP|MAC</code> ألعاب، <code>/reboot</code> إعادة تشغيل.<br>
+          <b>أوامر المستخدم العادي (المربوط بجهاز):</b> <code>/quota</code> و <code>/speed</code> و <code>/id</code>.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 5: MONITORING, AUTO-REBOOT, OTA & PASSWORD -->
+  <section id="tab-sys" class="panel">
+    <div class="grid g2">
+      <div class="card">
+        <div class="sec-h"><h2>المراقبة وإعادة التشغيل التلقائي</h2></div>
+        <label class="chk"><input type="checkbox" id="rbEn"> تفعيل إعادة التشغيل اليومي التلقائي</label>
+        <div class="grid g4" style="grid-template-columns:1fr 1fr 1fr">
+          <div class="fg"><label>الساعة (0-23)</label><input class="inp" id="rbHr" type="number" min="0" max="23"></div>
+          <div class="fg"><label>الدقيقة (0-59)</label><input class="inp" id="rbMn" type="number" min="0" max="59"></div>
+          <div class="fg"><label>المنطقة (UTC)</label><input class="inp" id="rbTz" type="number" min="-12" max="14"></div>
+        </div>
+        <div class="acts">
+          <button class="btn pri" onclick="saveAutoReboot()">حفظ الجدول</button>
+          <button class="btn err" onclick="rebootNow()">إعادة تشغيل فورية (3ث)</button>
+        </div>
+        <hr style="border:none;border-top:1px solid var(--brd);margin:16px 0">
+        <h3 style="font-size:14px;margin-bottom:10px">تغيير بيانات الدخول</h3>
+        <div class="fg"><label>كلمة المرور الحالية</label><input class="inp" id="pOld" type="password"></div>
+        <div class="grid g2">
+          <div class="fg"><label>اسم المستخدم الجديد (اختياري)</label><input class="inp" id="pUser"></div>
+          <div class="fg"><label>كلمة المرور الجديدة (4+ أحرف)</label><input class="inp" id="pNew" type="password"></div>
+        </div>
+        <button class="btn warn" onclick="changePass()">تحديث كلمة المرور</button>
+      </div>
+
+      <div class="card">
+        <div class="sec-h"><h2>التحديث التلقائي للنظام (OTA / sysupgrade)</h2></div>
+        <div class="fg"><label>رابط ملف الإصدار (version.json)</label>
+          <div style="display:flex;gap:6px">
+            <input class="inp" id="otaVerUrl" placeholder="https://.../version.json">
+            <button class="btn sm" onclick="saveOtaUrl()">حفظ</button>
+          </div>
+        </div>
+        <div class="acts" style="margin-bottom:12px">
+          <button class="btn pri" onclick="checkOta()">فحص التحديثات الآن</button>
+        </div>
+        <div id="otaRes" style="font-size:12.5px;color:var(--muted);margin-bottom:12px"></div>
+        <div class="fg"><label>تحديث عبر رابط مباشر (.bin)</label>
+          <div style="display:flex;gap:6px">
+            <input class="inp" id="otaBinUrl" placeholder="https://.../sysupgrade.bin">
+            <button class="btn ok sm" onclick="flashOtaUrl()">ترقية</button>
+          </div>
+        </div>
+        <hr style="border:none;border-top:1px solid var(--brd);margin:14px 0">
+        <div class="fg"><label>أو رفع ملف فيرموير محلي (.bin)</label>
+          <input class="inp" id="otaFile" type="file" accept=".bin">
+        </div>
+        <div class="bar hide" id="otaProgBar" style="margin-bottom:8px"><i id="otaProgFill" style="width:0%"></i></div>
+        <button class="btn warn" onclick="uploadOtaFile()">رفع وتثبيت الفيرموير</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- DEVICE EDIT MODAL -->
+<div id="devModal" class="modal-bg">
+  <div class="modal">
+    <div class="sec-h"><h2>تعديل الجهاز <small id="mMac" style="font-family:monospace;color:var(--muted)"></small></h2><button class="btn sm" onclick="closeModal()">✕</button></div>
+    <div class="fg"><label>اسم الجهاز</label><input class="inp" id="mName"></div>
+    <div class="fg"><label>كوتة الإنترنت بالجيجابايت (0 = غير محدود)</label><input class="inp" id="mQuota" type="number" step="0.1" min="0"></div>
+    <div class="grid g2">
+      <div class="fg"><label>أقصى تحميل (Mbps، 0=مفتوح)</label><input class="inp" id="mCapD" type="number" step="0.1" min="0"></div>
+      <div class="fg"><label>أقصى رفع (Mbps، 0=مفتوح)</label><input class="inp" id="mCapU" type="number" step="0.1" min="0"></div>
+    </div>
+    <div class="fg"><label>تثبيت IP ثابت (اتركه فارغاً للتلقائي)</label><input class="inp" id="mIp" placeholder="192.168.1.50"></div>
+    <div class="fg"><label>ربط Telegram Chat ID لصاحب الجهاز</label><input class="inp" id="mTg" placeholder="مثال: 123456789"></div>
+    <label class="chk"><input type="checkbox" id="mVip"> تفعيل وضع الألعاب (VIP أولوية DSCP)</label>
+    <label class="chk"><input type="checkbox" id="mBlk"> حظر الإنترنت عن هذا الجهاز</label>
+    <div class="acts" style="margin-top:14px;justify-content:flex-end">
+      <button class="btn" onclick="closeModal()">إلغاء</button>
+      <button class="btn pri" onclick="saveDevice()">حفظ التغييرات</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+let S = null, TG_USERS = [], editMac = null, tableMode = false, peakD = 0, peakU = 0;
+let histD = new Array(60).fill(0), histU = new Array(60).fill(0), formInit = false;
+
+const $ = id => document.getElementById(id);
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',3200);}
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function fmtBps(b){
+  if(!b||b<1000)return (b||0)+' bps';
+  if(b<1e6)return (b/1000).toFixed(1)+' Kbps';
+  return (b/1e6).toFixed(2)+' Mbps';
+}
+function fmtBytes(b){
+  const std = (S&&S.gb_standard===1000)?1000:1024;
+  if(!b)return '0 MB';
+  const mb = b/(std*std), gb = mb/std;
+  return gb>=1 ? gb.toFixed(2)+' GB' : mb.toFixed(1)+' MB';
+}
+function fmtUptime(s){
+  const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);
+  return (d?d+'ي ':'')+(h?h+'س ':'')+m+'د';
+}
+function gbUnit(){return (S&&S.gb_standard===1000)?1e9:1073741824;}
+
+async function api(act, body){
+  const opt = body!==undefined ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {method:'GET'};
+  const r = await fetch('/cgi-bin/api?action='+encodeURIComponent(act), opt);
+  if(r.status===401){showLogin();throw new Error('401');}
+  return r.json();
+}
+
+function showLogin(){$('loginView').classList.remove('hide');$('appView').classList.add('hide');}
+function showApp(){$('loginView').classList.add('hide');$('appView').classList.remove('hide');}
+
+$('themeSel').onchange = function(){
+  document.documentElement.setAttribute('data-theme', this.value);
+  localStorage.setItem('rm_theme', this.value);
+};
+(function(){
+  const th = localStorage.getItem('rm_theme')||'';
+  document.documentElement.setAttribute('data-theme', th);
+  $('themeSel').value = th;
+})();
+
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  $('tab-'+b.dataset.t).classList.add('active');
+  if(b.dataset.t==='net') loadNetInfo();
+});
+
+$('loginForm').onsubmit = async e=>{
+  e.preventDefault();
+  $('loginErr').textContent='';
+  try{
+    const res = await api('login',{username:$('lUser').value,password:$('lPass').value});
+    if(res.ok){showApp();formInit=false;poll();loadNetInfo();}
+    else $('loginErr').textContent=res.error||'خطأ في الدخول';
+  }catch(ex){$('loginErr').textContent='تعذر الاتصال بالراوتر';}
+};
+
+async function doLogout(){await api('logout',{});showLogin();}
+
+async function poll(){
+  try{
+    const res = await api('state');
+    if(!res.ok)return;
+    S = res.state||{};
+    TG_USERS = res.tg_users||[];
+    $('connDot').classList.remove('off');$('connTxt').textContent='متصل';
+    render();
+  }catch(e){
+    $('connDot').classList.add('off');$('connTxt').textContent='منقطع';
+  }
+}
+
+function render(){
+  if(!S||!S.devices)return;
+  $('fwVer').textContent='v'+(S.fw_version||'1.0');
+  $('hdrWan').textContent=S.wan_if||'wan';
+  $('hdrUp').textContent=fmtUptime(S.uptime_s||0);
+
+  if(S.reboot_countdown_s>=0){
+    $('rebootBanner').style.display='block';
+    $('rebootBanner').textContent='تنبيه: سيعاد تشغيل الراوتر خلال '+S.reboot_countdown_s+' ثانية...';
+  } else $('rebootBanner').style.display='none';
+
+  const td=S.total_down_bps||0, tu=S.total_up_bps||0;
+  if(td>peakD)peakD=td;if(tu>peakU)peakU=tu;
+  $('sDown').textContent=fmtBps(td);$('sPeakD').textContent=fmtBps(peakD);
+  $('sUp').textContent=fmtBps(tu);$('sPeakU').textContent=fmtBps(peakU);
+
+  const used=S.total_used_bytes||0, mq=S.main_quota_bytes||0;
+  $('sUsed').textContent=fmtBytes(used);
+  if(mq>0){
+    const pct=Math.min(100,(used*100)/mq);
+    $('sMainQ').textContent='من '+fmtBytes(mq)+' ('+pct.toFixed(1)+'%)';
+    $('mainBar').className='bar '+(pct>=95?'err':pct>=75?'warn':'ok');
+    $('mainBar').firstChild.style.width=pct.toFixed(1)+'%';
+  } else {
+    $('sMainQ').textContent='باقة غير محدودة';
+    $('mainBar').className='bar';$('mainBar').firstChild.style.width='0%';
+  }
+
+  const onlineCnt=S.devices.filter(d=>d.online).length;
+  $('sOnline').textContent=onlineCnt;$('sTotalDev').textContent=S.devices.length;
+  $('sRam').textContent=S.ram_free_kb?((S.ram_free_kb/1024).toFixed(1)+' / '+(S.ram_total_kb/1024).toFixed(1)+' MB'):'-';
+
+  histD.push(td);if(histD.length>60)histD.shift();
+  histU.push(tu);if(histU.length>60)histU.shift();
+  drawChart();
+
+  if(!formInit){
+    formInit=true;
+    $('qMainGb').value=(mq>0)?(mq/gbUnit()).toFixed(2):0;
+    $('qStart').value=S.start_date||'';$('qEnd').value=S.end_date||'';$('qDays').value=S.period_days||30;
+    $('qStd').value=S.gb_standard||1024;$('qPct').value=S.scale_pct||100;$('qPctLbl').textContent=(S.scale_pct||100)+'%';
+    $('qMode').value=S.scale_mode||0;
+    $('tgEn').checked=!!S.tg_enabled;$('tgInter').checked=!!S.tg_interactive;
+    $('tgTok').value=S.tg_token||'';$('tgIds').value=S.tg_admin_ids||'';$('tgThr').value=S.tg_thresholds||'50,75,90,95,100';
+    $('rbEn').checked=!!S.auto_reboot_enabled;$('rbHr').value=S.auto_reboot_hour??4;$('rbMn').value=S.auto_reboot_min??0;$('rbTz').value=S.auto_reboot_tz??2;
+    $('otaVerUrl').value=S.ota_version_url||'';
+  }
+
+  renderDevices();
+  renderTgUsers();
+}
+
+function drawChart(){
+  const c=$('spdChart'), ctx=c.getContext('2d'), w=c.width, h=c.height;
+  ctx.clearRect(0,0,w,h);
+  const mx=Math.max(500000, ...histD, ...histU);
+  ctx.strokeStyle='rgba(255,255,255,0.07)';ctx.lineWidth=1;
+  for(let i=1;i<=3;i++){const y=(h/4)*i;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  const plot=(arr,col,fill)=>{
+    ctx.beginPath();
+    arr.forEach((v,i)=>{
+      const x=(i/(arr.length-1))*w, y=h-10-((v/mx)*(h-24));
+      if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle=col;ctx.lineWidth=2.4;ctx.stroke();
+    ctx.lineTo(w,h);ctx.lineTo(0,h);ctx.closePath();ctx.fillStyle=fill;ctx.fill();
+  };
+  plot(histD,'#38bdf8','rgba(56,189,248,0.14)');
+  plot(histU,'#fb7185','rgba(251,113,133,0.12)');
+}
+
+function toggleView(){tableMode=!tableMode;$('viewBtn').textContent=tableMode?'عرض بطاقات':'عرض جدول';$('devCards').classList.toggle('hide',tableMode);$('devTable').classList.toggle('hide',!tableMode);renderDevices();}
+$('devSearch').oninput=renderDevices;$('devFilter').onchange=renderDevices;
+
+function renderDevices(){
+  const q=$('devSearch').value.trim().toLowerCase(), flt=$('devFilter').value;
+  const list=S.devices.filter(d=>{
+    if(flt==='on'&&!d.online)return false;
+    if(flt==='blk'&&!d.blocked)return false;
+    if(flt==='vip'&&!d.gaming_mode)return false;
+    if(q && !((d.name||'').toLowerCase().includes(q)||(d.ip||'').includes(q)||(d.mac||'').toLowerCase().includes(q)))return false;
+    return true;
+  }).sort((a,b)=>(b.online-a.online)||((b.cur_down_bps+b.cur_up_bps)-(a.cur_down_bps+a.cur_up_bps)));
+
+  if(!tableMode){
+    $('devCards').innerHTML = list.map(d=>{
+      const u=(d.up_bytes||0)+(d.down_bytes||0), qb=d.quota_bytes||0, pct=qb>0?Math.min(100,(u*100)/qb):0;
+      const nm=esc(d.name||d.mac);
+      return `<div class="dev ${d.blocked?'blocked':''} ${d.gaming_mode?'vip':''}">
+        <div class="dev-top">
+          <div><div class="dev-name">${nm}</div><div class="dev-meta">${esc(d.ip||'-')} • ${esc(d.mac)}</div></div>
+          <div class="badges">
+            <span class="bdg ${d.online?'on':'off'}">${d.online?'متصل':'غير متصل'}</span>
+            ${d.gaming_mode?'<span class="bdg vip">VIP</span>':''}
+            ${d.blocked?`<span class="bdg blk">${d.auto_blocked?'تجاوز الكوتة':'محظور'}</span>`:''}
+            ${(d.cap_down_kbps||d.cap_up_kbps)?`<span class="bdg cap">${(d.cap_down_kbps/1000).toFixed(1)}↓/${(d.cap_up_kbps/1000).toFixed(1)}↑M</span>`:''}
+          </div>
+        </div>
+        <div class="spd-row">
+          <div><span style="color:var(--muted)">تحميل</span><b style="color:var(--acc)">${fmtBps(d.cur_down_bps)}</b></div>
+          <div><span style="color:var(--muted)">رفع</span><b style="color:var(--pri2)">${fmtBps(d.cur_up_bps)}</b></div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:12px">
+            <span>المستهلك: <b>${fmtBytes(u)}</b></span>
+            <span>${qb>0?('الحد: '+fmtBytes(qb)+' ('+pct.toFixed(0)+'%)'):'مفتوح'}</span>
+          </div>
+          ${qb>0?`<div class="bar ${pct>=99?'err':pct>=75?'warn':'ok'}"><i style="width:${pct.toFixed(1)}%"></i></div>`:''}
+        </div>
+        <div class="acts">
+          <button class="btn sm pri" onclick="openModal('${d.mac}')">تعديل</button>
+          <button class="btn sm ok" onclick="addGb('${d.mac}',1)">+1G</button>
+          <button class="btn sm ok" onclick="addGb('${d.mac}',5)">+5G</button>
+          <button class="btn sm ${d.blocked?'ok':'err'}" onclick="togBlk('${d.mac}',${!d.blocked})">${d.blocked?'فك الحظر':'حظر'}</button>
+          <button class="btn sm vip" onclick="togVip('${d.mac}',${!d.gaming_mode})">VIP</button>
+          <button class="btn sm warn" onclick="rstDev('${d.mac}')">تصفير</button>
+        </div>
+      </div>`;
+    }).join('') || '<p style="color:var(--muted)">لا توجد أجهزة مطابقة.</p>';
+  } else {
+    $('devTbody').innerHTML = list.map(d=>{
+      const u=(d.up_bytes||0)+(d.down_bytes||0), qb=d.quota_bytes||0;
+      return `<tr>
+        <td><b>${esc(d.name||d.mac)}</b></td>
+        <td style="font-family:monospace">${esc(d.ip||'-')}<br><small>${esc(d.mac)}</small></td>
+        <td>${d.online?'🟢 متصل':'⚪'} ${d.blocked?'🔴 محظور':''} ${d.gaming_mode?'🟣 VIP':''}</td>
+        <td>${fmtBps(d.cur_down_bps)} / ${fmtBps(d.cur_up_bps)}</td>
+        <td>${fmtBytes(u)} / ${qb>0?fmtBytes(qb):'∞'}</td>
+        <td>${(d.cap_down_kbps||d.cap_up_kbps)?`${(d.cap_down_kbps/1000).toFixed(1)}↓ / ${(d.cap_up_kbps/1000).toFixed(1)}↑ M`:'أقصى سرعة'}</td>
+        <td>
+          <button class="btn sm pri" onclick="openModal('${d.mac}')">تعديل</button>
+          <button class="btn sm ok" onclick="addGb('${d.mac}',1)">+1G</button>
+          <button class="btn sm ${d.blocked?'ok':'err'}" onclick="togBlk('${d.mac}',${!d.blocked})">${d.blocked?'فك':'حظر'}</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+function openModal(mac){
+  const d=S.devices.find(x=>x.mac===mac);if(!d)return;
+  editMac=mac;$('mMac').textContent=mac;
+  $('mName').value=d.name||'';
+  $('mQuota').value=d.quota_bytes?(d.quota_bytes/gbUnit()).toFixed(2):0;
+  $('mCapD').value=d.cap_down_kbps?(d.cap_down_kbps/1000):0;
+  $('mCapU').value=d.cap_up_kbps?(d.cap_up_kbps/1000):0;
+  $('mIp').value=d.bound_ip||'';
+  $('mTg').value=d.tg_chat_id||'';
+  $('mVip').checked=!!d.gaming_mode;
+  $('mBlk').checked=!!d.blocked;
+  $('devModal').classList.add('open');
+}
+function closeModal(){$('devModal').classList.remove('open');}
+
+async function saveDevice(){
+  const q=Math.round((parseFloat($('mQuota').value)||0)*gbUnit());
+  const cd=Math.round((parseFloat($('mCapD').value)||0)*1000);
+  const cu=Math.round((parseFloat($('mCapU').value)||0)*1000);
+  await api('device_save',{
+    mac:editMac,name:$('mName').value.trim(),quota_bytes:q,
+    cap_down_kbps:cd,cap_up_kbps:cu,bound_ip:$('mIp').value.trim(),
+    tg_chat_id:$('mTg').value.trim(),gaming_mode:$('mVip').checked,blocked:$('mBlk').checked
+  });
+  closeModal();toast('تم حفظ بيانات الجهاز');poll();
+}
+async function addGb(mac,gb){await api('device_add_quota',{mac,add_bytes:Math.round(gb*gbUnit())});toast('تمت إضافة '+gb+' GB');poll();}
+async function togBlk(mac,blk){await api('device_block',{mac,blocked:blk});toast(blk?'تم الحظر':'تم فك الحظر');poll();}
+async function togVip(mac,vip){await api('device_gaming',{mac,gaming_mode:vip});toast(vip?'تم تفعيل VIP':'تم إلغاء VIP');poll();}
+async function rstDev(mac){if(!confirm('تصفير عداد هذا الجهاز؟'))return;await api('device_reset',{mac});toast('تم التصفير');poll();}
+async function resetAllUsage(){if(!confirm('تصفير استهلاك كل الأجهزة؟'))return;await api('meter_reset_all',{});toast('تم تصفير جميع العدادات');poll();}
+
+async function saveMainQuota(){
+  await api('main_quota',{
+    main_quota_bytes:Math.round((parseFloat($('qMainGb').value)||0)*gbUnit()),
+    start_date:$('qStart').value,end_date:$('qEnd').value,period_days:parseInt($('qDays').value)||30
+  });toast('تم حفظ الباقة الرئيسية');poll();
+}
+async function saveMeterScale(){
+  await api('meter_scale',{
+    gb_standard:parseInt($('qStd').value),scale_pct:parseInt($('qPct').value),scale_mode:parseInt($('qMode').value)
+  });toast('تم حفظ المعايرة');poll();
+}
+
+function toggleWanFields(){
+  const p=$('wanProto').value;
+  $('wanStatic').classList.toggle('hide',p!=='static');
+  $('wanPppoe').classList.toggle('hide',p!=='pppoe');
+}
+async function loadNetInfo(){
+  try{
+    const r=await api('net_info');if(!r.ok)return;
+    $('wSsid').value=r.wifi.ssid||'';$('wKey').value=r.wifi.key||'';$('wEnc').value=r.wifi.encryption||'psk2';
+    $('wChan').value=r.wifi.channel||'auto';$('wHt').value=r.wifi.htmode||'HT40';
+    $('wTxp').value=r.wifi.txpower||'';$('wCountry').value=r.wifi.country||'JP';$('wDis').checked=!!r.wifi.disabled;
+    $('wanProto').value=r.wan.proto||'dhcp';$('wanIp').value=r.wan.ipaddr||'';$('wanMask').value=r.wan.netmask||'';
+    $('wanGw').value=r.wan.gateway||'';$('wanDns').value=r.wan.dns||'';$('wanUser').value=r.wan.username||'';
+    toggleWanFields();
+  }catch(e){}
+}
+async function saveNetInfo(){
+  const b={
+    ssid:$('wSsid').value,key:$('wKey').value,encryption:$('wEnc').value,channel:$('wChan').value,
+    htmode:$('wHt').value,txpower:$('wTxp').value,country:$('wCountry').value,wifi_disabled:$('wDis').checked,
+    wan_proto:$('wanProto').value,wan_ip:$('wanIp').value,wan_mask:$('wanMask').value,
+    wan_gw:$('wanGw').value,wan_dns:$('wanDns').value,wan_user:$('wanUser').value,wan_pass:$('wanPass').value
+  };
+  await api('net_save',b);toast('تم تطبيق إعدادات الوايفاي والإنترنت');
+}
+
+async function saveTg(test){
+  const r=await api('telegram_save',{
+    enabled:$('tgEn').checked,interactive:$('tgInter').checked,token:$('tgTok').value.trim(),
+    admin_ids:$('tgIds').value.trim(),thresholds:$('tgThr').value.trim(),test:!!test
+  });
+  toast(r.msg||(r.ok?'تم حفظ إعدادات تليجرام':'حدث خطأ'));poll();
+}
+function renderTgUsers(){
+  if(!TG_USERS.length){$('tgUsersList').innerHTML='<span style="font-size:12px;color:var(--muted)">لم يتواصل أحد مع البوت بعد.</span>';return;}
+  $('tgUsersList').innerHTML=TG_USERS.map(u=>`<div class="pill" style="justify-content:space-between;width:100%">
+    <span>${esc(u.name||'User')} — <code>${esc(u.chat_id)}</code></span>
+    <button class="btn sm" onclick="navigator.clipboard?.writeText('${esc(u.chat_id)}');toast('تم نسخ المعرف')">نسخ ID</button>
+  </div>`).join('');
+}
+
+async function saveAutoReboot(){
+  await api('auto_reboot',{enabled:$('rbEn').checked,hour:parseInt($('rbHr').value)||0,min:parseInt($('rbMn').value)||0,tz:parseInt($('rbTz').value)||0});
+  toast('تم حفظ جدولة إعادة التشغيل');poll();
+}
+async function rebootNow(){if(!confirm('إعادة تشغيل الراوتر الآن؟'))return;await api('reboot_now',{countdown_s:3});toast('جاري إعادة التشغيل...');poll();}
+async function changePass(){
+  const r=await api('password',{old_password:$('pOld').value,new_username:$('pUser').value.trim(),new_password:$('pNew').value});
+  if(r.ok){toast('تم تحديث بيانات الدخول');$('pOld').value='';$('pNew').value='';}else toast(r.error||'فشل التحديث');
+}
+
+async function saveOtaUrl(){await api('ota_save',{ota_version_url:$('otaVerUrl').value.trim()});toast('تم حفظ رابط التحقق');}
+async function checkOta(){
+  $('otaRes').textContent='جاري الفحص...';
+  const r=await api('ota_check',{url:$('otaVerUrl').value.trim()});
+  if(r.ok&&r.remote){
+    $('otaRes').innerHTML=`أحدث إصدار: <b>${esc(r.remote.version||'?')}</b> — ${esc(r.remote.notes||'')}`;
+    if(r.remote.url)$('otaBinUrl').value=r.remote.url;
+  } else $('otaRes').textContent=r.error||'فشل الفحص';
+}
+async function flashOtaUrl(){
+  const u=$('otaBinUrl').value.trim();if(!u||!confirm('تثبيت التحديث من الرابط؟'))return;
+  toast('جاري التنزيل والتحقق...');
+  const r=await api('ota_url',{url:u});toast(r.msg||r.error||'تم');
+}
+function uploadOtaFile(){
+  const f=$('otaFile').files[0];if(!f){toast('اختر ملف .bin أولاً');return;}
+  if(!confirm('تثبيت ملف الفيرموير '+f.name+'؟'))return;
+  const bar=$('otaProgBar'),fill=$('otaProgFill');bar.classList.remove('hide');fill.style.width='0%';
+  const xhr=new XMLHttpRequest();
+  xhr.open('POST','/cgi-bin/api?action=ota_upload');
+  xhr.upload.onprogress=e=>{if(e.lengthComputable)fill.style.width=((e.loaded*100)/e.total).toFixed(0)+'%';};
+  xhr.onload=()=>{try{const r=JSON.parse(xhr.responseText);toast(r.msg||r.error||'انتهى');}catch(e){toast('جاري إعادة تشغيل الراوتر...');}};
+  xhr.send(f);
+}
+
+(async function init(){
+  try{
+    const a=await api('auth_status');
+    if(a.authenticated){showApp();await poll();setInterval(poll,1000);}
+    else showLogin();
+  }catch(e){showLogin();}
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+#ifndef TELEGRAM_H
+#define TELEGRAM_H
+
+#include <stdbool.h>
+#include <stddef.h>
+
+void telegram_init(void);
+void telegram_check_alerts(void);
+bool telegram_send_message(const char *chat_id, const char *text, const char *reply_markup_json);
+bool telegram_broadcast_admins(const char *text, const char *reply_markup_json);
+bool telegram_send_test(char *err_buf, size_t err_sz);
+
+#endif /* TELEGRAM_H */

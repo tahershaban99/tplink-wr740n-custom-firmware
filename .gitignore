@@ -1,0 +1,13 @@
+# Large SDK/ImageBuilder caches & original stock vendor firmware
+build_cache/
+wr740nv4_en_3_17_0_up_boot(150105).bin
+
+# Compiled objects and intermediate MIPS ELF binaries
+*.o
+wr740n_custom/src/rmeterd
+wr740n_custom/src/rmeter_cgi
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.tmp

@@ -1,0 +1,22 @@
+#!/bin/sh /etc/rc.common
+
+START=95
+STOP=10
+USE_PROCD=1
+
+PROG=/usr/sbin/rmeterd
+
+start_service() {
+    mkdir -p /etc/rmeter /tmp/rmeter
+    procd_open_instance
+    procd_set_param command "$PROG"
+    procd_set_param respawn 3600 5 5
+    procd_set_param term_timeout 10
+    procd_close_instance
+}
+
+stop_service() {
+    # procd sends SIGTERM which triggers clean flush to /etc/rmeter before exit
+    sleep 1
+}
+

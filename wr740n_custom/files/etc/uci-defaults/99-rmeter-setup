@@ -1,0 +1,55 @@
+#!/bin/sh
+
+mkdir -p /etc/rmeter /tmp/rmeter
+
+if [ -f /etc/config/uhttpd ]; then
+    uci set uhttpd.main.home='/www'
+    uci set uhttpd.main.index_page='index.html'
+    uci set uhttpd.main.error_page='/index.html'
+    uci set uhttpd.main.cgi_prefix='/cgi-bin'
+    uci set uhttpd.main.script_timeout='120'
+    uci set uhttpd.main.network_timeout='60'
+    uci commit uhttpd
+fi
+
+if ! grep -q '^/etc/rmeter/' /etc/sysupgrade.conf 2>/dev/null; then
+    echo '/etc/rmeter/' >> /etc/sysupgrade.conf
+fi
+
+# Strip IPv6 ULA prefix & DHCPv6 leftovers if present in default UCI
+if uci -q get network.globals.ula_prefix >/dev/null 2>&1; then
+    uci -q delete network.globals.ula_prefix
+    uci commit network
+fi
+if uci -q get network.wan6 >/dev/null 2>&1; then
+    uci -q delete network.wan6
+    uci commit network
+fi
+if uci -q get dhcp.lan.dhcpv6 >/dev/null 2>&1; then
+    uci -q delete dhcp.lan.dhcpv6
+    uci -q delete dhcp.lan.ra
+    uci commit dhcp
+fi
+
+uci set system.ntp.enabled='1' 2>/dev/null
+uci commit system 2>/dev/null
+
+# Ensure Wi-Fi supports Channels 12-13, full 18 dBm TX power, and HT40 without OBSS downgrade
+if uci -q get wireless.radio0 >/dev/null 2>&1; then
+    if [ -z "$(uci -q get wireless.radio0.country)" ]; then
+        uci set wireless.radio0.country='JP'
+    fi
+    if [ -z "$(uci -q get wireless.radio0.noscan)" ]; then
+        uci set wireless.radio0.noscan='1'
+    fi
+    if [ -z "$(uci -q get wireless.radio0.legacy_rates)" ]; then
+        uci set wireless.radio0.legacy_rates='0'
+    fi
+    uci commit wireless 2>/dev/null
+fi
+
+chmod +x /etc/init.d/rmeterd /usr/sbin/rmeterd /www/cgi-bin/api 2>/dev/null
+/etc/init.d/rmeterd enable 2>/dev/null
+
+exit 0
+
