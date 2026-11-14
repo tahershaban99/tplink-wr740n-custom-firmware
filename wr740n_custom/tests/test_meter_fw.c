@@ -100,6 +100,8 @@ int __wrap_system(const char *cmd) {
 
 static uint64_t s_mock_rx = 0, s_mock_tx = 0;
 static int s_mock_delay_ms = 0;
+static const char *s_mock_arp = NULL;
+static const char *s_mock_iw_assoc = NULL;
 
 FILE *__wrap_popen(const char *cmd, const char *type) {
     (void)type;
@@ -130,6 +132,7 @@ FILE *__wrap_popen(const char *cmd, const char *type) {
     if (cmd && (strstr(cmd, "iwinfo") || strstr(cmd, "ip route"))) {
         FILE *f = tmpfile();
         if (strstr(cmd, "ip route")) fprintf(f, "default via 2.2.2.2 dev eth1\n");
+        else if (strstr(cmd, "assoclist") && s_mock_iw_assoc) fprintf(f, "%s", s_mock_iw_assoc);
         rewind(f);
         return f;
     }
@@ -151,6 +154,12 @@ FILE *__wrap_fopen(const char *path, const char *mode) {
     if (path && strcmp(path, "/sys/class/net/eth1/statistics/tx_bytes") == 0) {
         FILE *f = tmpfile();
         fprintf(f, "%llu\n", (unsigned long long)s_mock_tx);
+        rewind(f);
+        return f;
+    }
+    if (path && strcmp(path, "/proc/net/arp") == 0 && s_mock_arp) {
+        FILE *f = tmpfile();
+        fprintf(f, "IP address       HW type     Flags       HW address            Mask     Device\n%s", s_mock_arp);
         rewind(f);
         return f;
     }
@@ -257,10 +266,50 @@ static void test_monotonic_speed_and_dirty_flash(void) {
     printf("[PASS] test_monotonic_speed_and_dirty_flash\n");
 }
 
+static void test_wifi_immediate_disconnect_and_wired_timeout(void) {
+    meter_init();
+    snprintf(g_wan_if, sizeof(g_wan_if), "eth1");
+    snprintf(g_lan_if, sizeof(g_lan_if), "br-lan");
+
+    s_mock_arp = "192.168.1.50     0x1         0x2         aa:bb:cc:dd:ee:11     *        br-lan\n";
+    s_mock_iw_assoc = "AA:BB:CC:DD:EE:11  -45 dBm / -95 dBm (SNR 50)  100 ms ago\n";
+    meter_tick(2.0);
+    assert(g_device_count == 1);
+    assert(g_devices[0].is_wifi == true);
+    assert(g_devices[0].online == true);
+
+    /* Wi-Fi disconnects: gone from assoclist, still stale in /proc/net/arp + residual WAN packet (dd > 0) */
+    s_mock_iw_assoc = "";
+    for (int k = 0; k < s_dl_cnt; k++) {
+        if (strcmp(s_dl_ips[k], "192.168.1.50") == 0) s_dl_bytes[k] += 128;
+    }
+    meter_tick(2.0);
+    assert(g_devices[0].is_wifi == true);
+    assert(g_devices[0].online == false);
+
+    /* Wired device: offline after 10s without traffic/ARP, online within 10s */
+    s_mock_arp = NULL;
+    g_device_count = 1;
+    memset(&g_devices[0], 0, sizeof(g_devices[0]));
+    snprintf(g_devices[0].mac, sizeof(g_devices[0].mac), "AA:BB:CC:DD:EE:22");
+    snprintf(g_devices[0].ip, sizeof(g_devices[0].ip), "192.168.1.60");
+    g_devices[0].is_wifi = false;
+    g_devices[0].online = true;
+    g_devices[0].last_seen = time(NULL) - 8;
+    meter_tick(2.0);
+    assert(g_devices[0].online == true);
+
+    g_devices[0].last_seen = time(NULL) - 11;
+    meter_tick(2.0);
+    assert(g_devices[0].online == false);
+    printf("[PASS] test_wifi_immediate_disconnect_and_wired_timeout\n");
+}
+
 int main(void) {
     test_htb_global_and_headroom();
     test_ipt_ip_reuse_and_no_fork_storm();
     test_monotonic_speed_and_dirty_flash();
+    test_wifi_immediate_disconnect_and_wired_timeout();
     printf("ALL test_meter_fw PASSED!\n");
     return 0;
 }

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <unistd.h>
 
 rmeter_device_t g_devices[RMETER_MAX_DEVICES];
@@ -51,6 +52,8 @@ static uint32_t smooth_bps(uint32_t prev, uint32_t inst) {
 static char s_wifi_ssid[64] = "RouterMeter";
 static char s_wifi_chan[16] = "auto";
 static bool s_wifi_disabled = false;
+static int s_wifi_txpower_dbm = 0;
+static int s_wifi_signal_dbm = 0;
 static time_t s_last_wifi_meta = 0;
 
 static void norm_mac(const char *in, char *out, size_t sz) {
@@ -406,10 +409,12 @@ static bool read_sys_u64(const char *path, uint64_t *out) {
     return ok;
 }
 
+static bool s_iw_ok = false;
+static bool s_wifi_seen[RMETER_MAX_DEVICES];
+
 static void discover_clients(time_t now) {
-    for (int i = 0; i < g_device_count; i++) {
-        g_devices[i].is_wifi = false;
-    }
+    s_iw_ok = false;
+    memset(s_wifi_seen, 0, sizeof(s_wifi_seen));
 
     /* 1. /tmp/dhcp.leases: expiry mac ip name clientid (metadata/IP only, not live presence) */
     FILE *fp = fopen("/tmp/dhcp.leases", "r");
@@ -436,8 +441,10 @@ static void discover_clients(time_t now) {
                 if (strcmp(dev, g_lan_if) == 0 && strcmp(flags, "0x0") != 0) {
                     int idx = ensure_device(mac, ip, NULL);
                     if (idx >= 0) {
-                        if (!g_devices[idx].online || g_devices[idx].connected_at == 0) g_devices[idx].connected_at = now;
-                        g_devices[idx].last_seen = now;
+                        if (!g_devices[idx].is_wifi) {
+                            if (!g_devices[idx].online || g_devices[idx].connected_at == 0) g_devices[idx].connected_at = now;
+                            g_devices[idx].last_seen = now;
+                        }
                     }
                 }
             }
@@ -448,6 +455,7 @@ static void discover_clients(time_t now) {
     /* 3. iwinfo assoclist for active Wi-Fi clients */
     FILE *iw = popen("iwinfo wlan0 assoclist 2>/dev/null", "r");
     if (iw) {
+        s_iw_ok = true;
         char line[256];
         while (fgets(line, sizeof(line), iw)) {
             char mac[32] = {0};
@@ -455,6 +463,7 @@ static void discover_clients(time_t now) {
                 int idx = ensure_device(mac, NULL, NULL);
                 if (idx >= 0) {
                     g_devices[idx].is_wifi = true;
+                    s_wifi_seen[idx] = true;
                     if (!g_devices[idx].online || g_devices[idx].connected_at == 0) g_devices[idx].connected_at = now;
                     g_devices[idx].last_seen = now;
                 }
@@ -488,6 +497,16 @@ static void discover_clients(time_t now) {
                     if (sscanf(ch + 9, "%d", &cnum) == 1 && cnum > 0) {
                         snprintf(s_wifi_chan, sizeof(s_wifi_chan), "%d", cnum);
                     }
+                }
+                char *tp = strstr(line, "Tx-Power:");
+                if (tp) {
+                    int txp = 0;
+                    if (sscanf(tp + 9, "%d", &txp) == 1) s_wifi_txpower_dbm = txp;
+                }
+                char *sg = strstr(line, "Signal:");
+                if (sg) {
+                    int sig = 0;
+                    if (sscanf(sg + 7, "%d", &sig) == 1) s_wifi_signal_dbm = sig;
                 }
             }
             s_wifi_disabled = !saw_any;
@@ -533,12 +552,20 @@ void meter_tick(double dt_sec) {
         g_devices[i].cur_up_bps = smooth_bps(g_devices[i].cur_up_bps, inst_up);
         g_devices[i].cur_down_bps = smooth_bps(g_devices[i].cur_down_bps, inst_dn);
 
-        if (du > 0 || dd > 0) {
+        if ((du > 0 || dd > 0) && !(g_devices[i].is_wifi && s_iw_ok && !s_wifi_seen[i])) {
             if (!g_devices[i].online || g_devices[i].connected_at == 0) g_devices[i].connected_at = now;
             g_devices[i].last_seen = now;
         }
-        g_devices[i].online = (g_devices[i].last_seen > 0 && (now - g_devices[i].last_seen) <= 60);
-        if (!g_devices[i].online) g_devices[i].connected_at = 0;
+        if (g_devices[i].is_wifi && s_iw_ok) {
+            g_devices[i].online = s_wifi_seen[i];
+        } else {
+            g_devices[i].online = (g_devices[i].last_seen > 0 && (now - g_devices[i].last_seen) <= 10);
+        }
+        if (!g_devices[i].online) {
+            g_devices[i].connected_at = 0;
+            g_devices[i].cur_up_bps = 0;
+            g_devices[i].cur_down_bps = 0;
+        }
 
         /* Enforce per-device quota auto-block */
         if (g_devices[i].quota_bytes > 0) {
@@ -607,15 +634,25 @@ void meter_tick(double dt_sec) {
     pthread_mutex_unlock(&g_lock);
 }
 
-static void read_sys_stats(unsigned long *uptime_s, unsigned long *ram_total_kb, unsigned long *ram_free_kb) {
+static void read_sys_stats(unsigned long *uptime_s, unsigned long *ram_total_kb, unsigned long *ram_free_kb,
+                           double *cpu_load, unsigned long *flash_total_kb, unsigned long *flash_free_kb) {
     *uptime_s = 0;
     *ram_total_kb = 0;
     *ram_free_kb = 0;
+    *cpu_load = 0.0;
+    *flash_total_kb = 0;
+    *flash_free_kb = 0;
 
     FILE *fp = fopen("/proc/uptime", "r");
     if (fp) {
         double up = 0;
         if (fscanf(fp, "%lf", &up) == 1) *uptime_s = (unsigned long)up;
+        fclose(fp);
+    }
+    fp = fopen("/proc/loadavg", "r");
+    if (fp) {
+        double l1 = 0.0;
+        if (fscanf(fp, "%lf", &l1) == 1 && l1 >= 0.0) *cpu_load = l1;
         fclose(fp);
     }
     fp = fopen("/proc/meminfo", "r");
@@ -631,11 +668,17 @@ static void read_sys_stats(unsigned long *uptime_s, unsigned long *ram_total_kb,
         *ram_free_kb = mfree + mbuf + mcache;
         fclose(fp);
     }
+    struct statvfs vfs;
+    if (statvfs("/overlay", &vfs) == 0 || statvfs("/", &vfs) == 0) {
+        *flash_total_kb = (unsigned long)(((uint64_t)vfs.f_blocks * vfs.f_frsize) / 1024ULL);
+        *flash_free_kb = (unsigned long)(((uint64_t)vfs.f_bavail * vfs.f_frsize) / 1024ULL);
+    }
 }
 
 void meter_write_ram_json(void) {
-    unsigned long uptime_s = 0, ram_tot = 0, ram_free = 0;
-    read_sys_stats(&uptime_s, &ram_tot, &ram_free);
+    unsigned long uptime_s = 0, ram_tot = 0, ram_free = 0, flash_tot = 0, flash_free = 0;
+    double cpu_load = 0.0;
+    read_sys_stats(&uptime_s, &ram_tot, &ram_free, &cpu_load, &flash_tot, &flash_free);
     time_t now = time(NULL);
 
     char tmp[128];
@@ -674,6 +717,9 @@ void meter_write_ram_json(void) {
         fprintf(fp, "  \"uptime_s\": %lu,\n", uptime_s);
         fprintf(fp, "  \"ram_total_kb\": %lu,\n", ram_tot);
         fprintf(fp, "  \"ram_free_kb\": %lu,\n", ram_free);
+        fprintf(fp, "  \"cpu_load\": %.2f,\n", cpu_load);
+        fprintf(fp, "  \"flash_total_kb\": %lu,\n", flash_tot);
+        fprintf(fp, "  \"flash_free_kb\": %lu,\n", flash_free);
         fprintf(fp, "  \"observer_mode\": %s,\n", g_config.observer_mode_enabled ? "true" : "false");
         fprintf(fp, "  \"ota_auto_check\": %s,\n", g_config.ota_auto_check_enabled ? "true" : "false");
         fprintf(fp, "  \"time_synced\": %s,\n", time_synced ? "true" : "false");
@@ -681,6 +727,8 @@ void meter_write_ram_json(void) {
         fprintf(fp, "  \"wifi_ssid\": \"%s\",\n", esc_ssid);
         fprintf(fp, "  \"wifi_channel\": \"%s\",\n", s_wifi_chan);
         fprintf(fp, "  \"wifi_disabled\": %s,\n", s_wifi_disabled ? "true" : "false");
+        fprintf(fp, "  \"wifi_txpower_dbm\": %d,\n", s_wifi_txpower_dbm);
+        fprintf(fp, "  \"wifi_signal_dbm\": %d,\n", s_wifi_signal_dbm);
         fprintf(fp, "  \"wifi_clients\": %d,\n", wifi_clients);
         fprintf(fp, "  \"total_up_bps\": %u,\n", (unsigned)g_total_up_bps);
         fprintf(fp, "  \"total_down_bps\": %u,\n", (unsigned)g_total_down_bps);

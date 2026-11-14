@@ -2,7 +2,7 @@ CC ?= gcc
 CFLAGS ?= -O2 -Wall -Wextra -std=gnu99
 LDFLAGS ?= -lpthread -ldl
 
-SRCS = main.c meter.c firewall.c telegram.c json_util.c
+SRCS = main.c meter.c firewall.c telegram.c json_util.c fazakkir.c
 OBJS = $(SRCS:.c=.o)
 CGI_OBJS = rmeter_cgi.o json_util.o
 TARGET = rmeterd

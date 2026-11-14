@@ -1,614 +1,981 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" data-theme="forest" data-mode="light">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-<title>لوحة تحكم الراوتر | RouterMeter</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RouterMeter — لوحة التحكم بالراوتر</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600;700&family=Almarai:wght@400;700&family=Cairo:wght@400;600;700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Readex+Pro:wght@400;500;600;700&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0d090b;--bg2:#171015;--glass:rgba(30,20,26,.72);--card:rgba(255,255,255,.045);
-  --brd:rgba(255,255,255,.1);--txt:#f8f4f6;--muted:#b29da6;
-  --pri:#e11d48;--pri2:#fb7185;--acc:#38bdf8;--ok:#10b981;--warn:#f59e0b;--err:#ef4444;--vip:#a855f7;
-  --r:14px;--sh:0 10px 30px rgba(0,0,0,.45);
+  --hdr-h:54px;--side-w:220px;--r:8px;--r-sm:6px;--fs-k:1;
+  --font-ui:"IBM Plex Sans Arabic",system-ui,-apple-system,Tahoma,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
 }
-[data-theme="sunset"]{
-  --bg:#0b0f19;--bg2:#161224;--glass:rgba(24,20,38,.74);--pri:#f43f5e;--pri2:#fb923c;--acc:#38bdf8;
+[data-mode="light"]{color-scheme:light}
+[data-mode="dark"]{color-scheme:dark}
+/* 1. FOREST NOC (DEFAULT) */
+[data-theme="forest"][data-mode="light"]{
+  --bg:#f2f6f4;--bg-sub:#e6eeea;--surf:#ffffff;--surf-2:#eef4f1;--brd:#d2dfd8;--brd-strong:#b6cbc0;
+  --txt:#10221a;--muted:#4d685c;--pri:#047857;--pri-fg:#ffffff;--pri-soft:rgba(4,120,87,.10);
+  --acc:#0284c7;--ok:#047857;--warn:#b45309;--err:#b91c1c;--vip:#a16207;--sh:0 1px 3px rgba(16,34,26,.06);
 }
-[data-theme="cyber"]{
-  --bg:#061014;--bg2:#091c22;--glass:rgba(10,28,34,.75);--pri:#06b6d4;--pri2:#22d3ee;--acc:#10b981;
+[data-theme="forest"][data-mode="dark"]{
+  --bg:#09110e;--bg-sub:#0d1713;--surf:#111e19;--surf-2:#172922;--brd:#21382f;--brd-strong:#2f5043;
+  --txt:#ecf5f1;--muted:#8aa69b;--pri:#10b981;--pri-fg:#032218;--pri-soft:rgba(16,185,129,.14);
+  --acc:#38bdf8;--ok:#10b981;--warn:#eab308;--err:#f87171;--vip:#eab308;--sh:0 1px 2px rgba(0,0,0,.35);
 }
-[data-theme="light"]{
-  --bg:#f1f5f9;--bg2:#e2e8f0;--glass:rgba(255,255,255,.85);--card:rgba(15,23,42,.04);
-  --brd:rgba(15,23,42,.12);--txt:#0f172a;--muted:#475569;--pri:#e11d48;--pri2:#be123c;--acc:#0284c7;
-  --sh:0 8px 24px rgba(15,23,42,.08);
+/* 2. SWISS COPPER */
+[data-theme="swiss"][data-mode="light"]{
+  --bg:#f5f4f0;--bg-sub:#eceae3;--surf:#ffffff;--surf-2:#f0efe9;--brd:#dedcd4;--brd-strong:#c7c4b8;
+  --txt:#17191c;--muted:#5c6370;--pri:#b85014;--pri-fg:#ffffff;--pri-soft:rgba(184,80,20,.10);
+  --acc:#0f766e;--ok:#15803d;--warn:#b45309;--err:#b91c1c;--vip:#b85014;--sh:0 1px 3px rgba(23,25,28,.06);
 }
-*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
-body{background:radial-gradient(circle at 12% 10%,rgba(225,29,72,.16),transparent 42%),radial-gradient(circle at 88% 85%,rgba(56,189,248,.12),transparent 45%),linear-gradient(160deg,var(--bg),var(--bg2));color:var(--txt);min-height:100vh;line-height:1.5;overflow-x:hidden}
-a{color:var(--acc)}
-button,input,select{font:inherit;color:inherit}
-.wrap{max-width:1480px;width:96%;margin:0 auto;padding:14px}
-.hdr{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--brd);border-radius:var(--r);padding:12px 16px;box-shadow:var(--sh);margin-bottom:14px}
-.brand{display:flex;align-items:center;gap:10px}
-.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--pri),var(--pri2));display:grid;place-items:center;font-weight:800;color:#fff;font-size:18px;box-shadow:0 4px 16px rgba(225,29,72,.35)}
-.brand h1{font-size:17px;font-weight:700}
-.brand small{display:block;font-size:11px;color:var(--muted)}
-.hdr-ctrl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;background:var(--card);border:1px solid var(--brd);font-size:12px}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
-.dot.off{background:var(--err);box-shadow:0 0 8px var(--err)}
-.btn{cursor:pointer;border:1px solid var(--brd);background:var(--card);padding:8px 13px;border-radius:10px;font-size:13px;font-weight:600;transition:.18s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
-.btn:hover{transform:translateY(-1px);border-color:var(--pri2)}
-.btn.pri{background:linear-gradient(135deg,var(--pri),var(--pri2));border-color:transparent;color:#fff}
-.btn.ok{background:rgba(16,185,129,.18);border-color:rgba(16,185,129,.45);color:#34d399}
-.btn.warn{background:rgba(245,158,11,.16);border-color:rgba(245,158,11,.4);color:#fbbf24}
-.btn.err{background:rgba(239,68,68,.16);border-color:rgba(239,68,68,.4);color:#f87171}
-.btn.vip{background:rgba(168,85,247,.18);border-color:rgba(168,85,247,.45);color:#c084fc}
-.btn.sm{padding:5px 9px;font-size:12px;border-radius:8px}
-.tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px}
-.tab{cursor:pointer;white-space:nowrap;padding:9px 15px;border-radius:11px;background:var(--glass);border:1px solid var(--brd);font-size:13px;font-weight:600;color:var(--muted);transition:.18s}
-.tab.active{background:linear-gradient(135deg,var(--pri),var(--pri2));color:#fff;border-color:transparent;box-shadow:0 4px 14px rgba(225,29,72,.3)}
+[data-theme="swiss"][data-mode="dark"]{
+  --bg:#111315;--bg-sub:#16191d;--surf:#1a1d22;--surf-2:#22262d;--brd:#2b3039;--brd-strong:#3a414d;
+  --txt:#f2f3f5;--muted:#9aa3b2;--pri:#d97736;--pri-fg:#ffffff;--pri-soft:rgba(217,119,54,.14);
+  --acc:#38a3a5;--ok:#22c55e;--warn:#eab308;--err:#ef4444;--vip:#d97736;--sh:0 1px 2px rgba(0,0,0,.35);
+}
+/* 3. TELCO PETROL */
+[data-theme="petrol"][data-mode="light"]{
+  --bg:#f3f6f8;--bg-sub:#e8eef2;--surf:#ffffff;--surf-2:#f1f5f9;--brd:#d5dfe7;--brd-strong:#b8c7d4;
+  --txt:#0f172a;--muted:#475569;--pri:#0d9488;--pri-fg:#ffffff;--pri-soft:rgba(13,148,136,.10);
+  --acc:#2563eb;--ok:#059669;--warn:#d97706;--err:#e11d48;--vip:#2563eb;--sh:0 1px 3px rgba(15,23,42,.06);
+}
+[data-theme="petrol"][data-mode="dark"]{
+  --bg:#0b0f13;--bg-sub:#10161c;--surf:#131b23;--surf-2:#19232d;--brd:#212e3b;--brd-strong:#2f4052;
+  --txt:#e6edf3;--muted:#8b9bb0;--pri:#14b8a6;--pri-fg:#042f2e;--pri-soft:rgba(20,184,166,.13);
+  --acc:#3b82f6;--ok:#10b981;--warn:#f59e0b;--err:#f43f5e;--vip:#3b82f6;--sh:0 1px 2px rgba(0,0,0,.4);
+}
+/* 4. ARCHITECTURAL SAND & OLIVE */
+[data-theme="olive"][data-mode="light"]{
+  --bg:#faf8f3;--bg-sub:#f1ede3;--surf:#ffffff;--surf-2:#f5f2ea;--brd:#e4decb;--brd-strong:#cfc6af;
+  --txt:#1e1b16;--muted:#686054;--pri:#4d7c0f;--pri-fg:#ffffff;--pri-soft:rgba(77,124,15,.10);
+  --acc:#b45309;--ok:#3f6212;--warn:#b45309;--err:#c2410c;--vip:#9a3412;--sh:0 1px 3px rgba(30,27,22,.05);
+}
+[data-theme="olive"][data-mode="dark"]{
+  --bg:#141311;--bg-sub:#1a1815;--surf:#1f1d19;--surf-2:#282520;--brd:#332f28;--brd-strong:#464036;
+  --txt:#f4efe6;--muted:#a89f91;--pri:#84cc16;--pri-fg:#141a06;--pri-soft:rgba(132,204,22,.13);
+  --acc:#d4a373;--ok:#84cc16;--warn:#e9c46a;--err:#e76f51;--vip:#d4a373;--sh:0 1px 2px rgba(0,0,0,.35);
+}
+/* 5. MONOCHROME INK + COBALT */
+[data-theme="ink"][data-mode="light"]{
+  --bg:#fafafa;--bg-sub:#f4f4f5;--surf:#ffffff;--surf-2:#f4f4f5;--brd:#e4e4e7;--brd-strong:#d4d4d8;
+  --txt:#09090b;--muted:#52525b;--pri:#1d4ed8;--pri-fg:#ffffff;--pri-soft:rgba(29,78,216,.09);
+  --acc:#2563eb;--ok:#16a34a;--warn:#d97706;--err:#dc2626;--vip:#0284c7;--sh:none;
+}
+[data-theme="ink"][data-mode="dark"]{
+  --bg:#09090b;--bg-sub:#0f0f12;--surf:#141418;--surf-2:#1c1c22;--brd:#27272e;--brd-strong:#3f3f49;
+  --txt:#fafafa;--muted:#a1a1aa;--pri:#2563eb;--pri-fg:#ffffff;--pri-soft:rgba(37,99,235,.16);
+  --acc:#60a5fa;--ok:#22c55e;--warn:#f59e0b;--err:#ef4444;--vip:#38bdf8;--sh:none;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:var(--font-ui);
+  font-size:calc(12.5px * var(--fs-k,1));
+  font-weight:500;background:var(--bg);color:var(--txt);line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+.num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate;display:inline-block}
+.code{font-family:var(--font-mono);font-size:.9em;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate;display:inline-block}
+.hide{display:none!important}
+
+/* FIXED TOP HEADER */
+.hdr{
+  position:fixed;top:0;left:0;right:0;height:var(--hdr-h);z-index:60;
+  background:var(--bg-sub);border-bottom:1px solid var(--brd);
+  display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 14px;
+}
+.brand{display:flex;align-items:center;gap:9px;min-width:0}
+.logo{
+  width:30px;height:30px;border-radius:var(--r-sm);background:var(--pri);color:var(--pri-fg);
+  display:grid;place-items:center;font-weight:700;font-size:13.5px;flex-shrink:0;
+}
+.brand h1{font-size:calc(13.5px * var(--fs-k,1));font-weight:700;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.ver-tag{font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:var(--pri-soft);color:var(--pri)}
+.brand small{display:block;font-size:calc(10.5px * var(--fs-k,1));color:var(--muted);white-space:nowrap}
+.hdr-ctrl{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;overflow-x:auto;padding:2px 0}
+.pill{
+  display:inline-flex;align-items:center;gap:5px;padding:3.5px 8px;border-radius:var(--r-sm);
+  background:var(--surf);border:1px solid var(--brd);font-size:calc(11px * var(--fs-k,1));font-weight:600;white-space:nowrap;
+}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--ok);display:inline-block}
+.dot.off{background:var(--err)}
+.hdr-sel{
+  background:var(--surf);border:1px solid var(--brd);border-radius:var(--r-sm);
+  color:var(--txt);font:inherit;font-size:11px;font-weight:600;padding:3.5px 7px;cursor:pointer;outline:none;width:auto;
+}
+.fs-group{display:inline-flex;align-items:center;border:1px solid var(--brd);border-radius:var(--r-sm);background:var(--surf);overflow:hidden;flex-shrink:0}
+.fs-group button{cursor:pointer;border:none;background:transparent;color:var(--txt);padding:3.5px 7px;font:inherit;font-size:11px;font-weight:700}
+.fs-group button:hover{background:var(--surf-2)}
+.fs-group span{padding:0 6px;font-size:11px;color:var(--muted);border-left:1px solid var(--brd);border-right:1px solid var(--brd)}
+
+/* FIXED RIGHT VERTICAL SIDEBAR (DESKTOP) */
+.tabs{
+  position:fixed;top:var(--hdr-h);right:0;bottom:0;width:var(--side-w);z-index:55;
+  background:var(--bg-sub);border-left:1px solid var(--brd);
+  padding:10px 9px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;
+}
+.side-lbl{font-size:calc(10.5px * var(--fs-k,1));font-weight:700;color:var(--muted);padding:7px 9px 3px}
+.tab{
+  cursor:pointer;display:flex;align-items:center;gap:8px;width:100%;text-align:right;
+  padding:7px 10px;border-radius:var(--r-sm);border:1px solid transparent;
+  background:transparent;color:var(--muted);font:inherit;font-size:calc(12px * var(--fs-k,1));font-weight:600;transition:.14s;
+}
+.tab svg{width:15px;height:15px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:1.9}
+.tab:hover{background:var(--surf-2);color:var(--txt)}
+.tab.active{background:var(--pri-soft);color:var(--pri);font-weight:700}
+.tab.active::before{content:"";width:3px;height:15px;border-radius:2px;background:var(--pri);margin-left:-2px}
+.side-foot{
+  margin-top:auto;padding:9px;border-top:1px solid var(--brd);font-size:calc(11px * var(--fs-k,1));color:var(--muted);
+  display:flex;flex-direction:column;gap:8px;
+}
+.uptime-box{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r-sm);padding:8px 9px}
+.uptime-lbl{font-size:calc(10.5px * var(--fs-k,1));color:var(--muted);font-weight:600;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
+.uptime-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;text-align:center}
+.uptime-cell{background:var(--bg-sub);border:1px solid var(--brd);border-radius:4px;padding:4px 2px}
+.uptime-cell b{display:block;font-size:calc(13px * var(--fs-k,1));font-weight:700;color:var(--txt);line-height:1.15}
+.uptime-cell small{display:block;font-size:calc(9.5px * var(--fs-k,1));color:var(--muted)}
+
+/* SCROLLABLE MAIN CONTENT */
+.main{
+  margin-top:var(--hdr-h);margin-right:var(--side-w);
+  padding:14px 16px 40px;min-height:calc(100vh - var(--hdr-h));
+}
+@media (max-width:900px){
+  .tabs{
+    top:var(--hdr-h);right:0;left:0;bottom:auto;width:100%;height:42px;
+    flex-direction:row;align-items:center;border-left:none;border-bottom:1px solid var(--brd);
+    padding:0 8px;overflow-x:auto;overflow-y:hidden;gap:4px;
+  }
+  .side-lbl,.side-foot,.tab.active::before{display:none}
+  .tab{width:auto;white-space:nowrap;padding:5px 9px;font-size:calc(11.5px * var(--fs-k,1))}
+  .main{margin-right:0;margin-top:calc(var(--hdr-h) + 42px);padding:12px 10px 36px}
+  .brand small{display:none}
+}
+
+/* PANELS & CARDS */
 .panel{display:none}.panel.active{display:block}
 .grid{display:grid;gap:12px}
-.g4{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
-.g2{grid-template-columns:repeat(auto-fit,minmax(310px,1fr))}
-.card{background:var(--glass);backdrop-filter:blur(12px);border:1px solid var(--brd);border-radius:var(--r);padding:15px;box-shadow:var(--sh)}
-.stat-lbl{font-size:12px;color:var(--muted);margin-bottom:4px}
-.stat-val{font-size:23px;font-weight:800;letter-spacing:-.3px}
-.stat-sub{font-size:12px;color:var(--muted);margin-top:4px}
-.bar{height:8px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:8px}
-.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--pri2));transition:width .35s}
-.bar.ok>i{background:linear-gradient(90deg,#059669,#34d399)}
-.bar.warn>i{background:linear-gradient(90deg,#d97706,#fbbf24)}
-.bar.err>i{background:linear-gradient(90deg,#dc2626,#f87171)}
-.sec-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
-.sec-h h2{font-size:16px;font-weight:700}
-.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.inp,select{background:var(--card);border:1px solid var(--brd);border-radius:9px;padding:8px 11px;font-size:13px;outline:none;width:100%}
-.inp:focus,select:focus{border-color:var(--pri2)}
-select option{background:#1a1518;color:#fff}
-.dev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(295px,1fr));gap:12px}
-.dev{background:var(--glass);border:1px solid var(--brd);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px;position:relative;transition:.18s}
-.dev.blocked{border-color:rgba(239,68,68,.5);background:linear-gradient(180deg,rgba(239,68,68,.08),var(--glass))}
-.dev.vip{border-color:rgba(168,85,247,.5)}
-.dev-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
-.dev-name{font-weight:700;font-size:15px;word-break:break-word}
-.dev-meta{font-size:11.5px;color:var(--muted);font-family:monospace}
-.badges{display:flex;flex-wrap:wrap;gap:5px}
-.bdg{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600;border:1px solid transparent}
-.bdg.on{background:rgba(16,185,129,.16);color:#34d399;border-color:rgba(16,185,129,.35)}
-.bdg.off{background:rgba(148,163,184,.12);color:var(--muted);border-color:var(--brd)}
-.bdg.blk{background:rgba(239,68,68,.18);color:#f87171;border-color:rgba(239,68,68,.4)}
-.bdg.vip{background:rgba(168,85,247,.2);color:#d8b4fe;border-color:rgba(168,85,247,.45)}
-.bdg.cap{background:rgba(245,158,11,.18);color:#fbbf24;border-color:rgba(245,158,11,.4)}
-.spd-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--card);border-radius:10px;padding:8px 10px;font-size:12.5px}
-.spd-row b{display:block;font-size:14px}
-.acts{display:flex;flex-wrap:wrap;gap:6px}
-.tbl-wrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:12.5px}
-th,td{padding:8px 7px;border-bottom:1px solid var(--brd);text-align:right;vertical-align:middle}
-th{color:var(--muted);font-size:11.5px;font-weight:700;white-space:nowrap;background:rgba(0,0,0,.18)}
-tbody tr:hover{background:rgba(255,255,255,.028)}
-tbody tr.blocked{background:rgba(239,68,68,.06)}
-tbody tr.vip{background:rgba(168,85,247,.06)}
-.tinp{background:rgba(0,0,0,.28);border:1px solid var(--brd);border-radius:7px;padding:4px 7px;font-size:12px;outline:none;transition:.15s}
-.tinp:focus{border-color:var(--pri2);background:rgba(255,255,255,.08)}
-.tinp.dirty{border-color:var(--warn);box-shadow:0 0 0 1px rgba(245,158,11,.35)}
-.sec-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:700;background:rgba(16,185,129,.16);color:#34d399;border:1px solid rgba(16,185,129,.35)}
-.sec-badge.off{background:rgba(148,163,184,.14);color:var(--muted);border-color:var(--brd)}
-.dur-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:8px;font-size:11.5px;font-weight:600;background:rgba(16,185,129,.12);color:#34d399;border:1px solid rgba(16,185,129,.25);white-space:nowrap}
-.dur-pill.off{background:var(--card);color:var(--muted);border-color:var(--brd)}
-.ip-main{font-family:monospace;font-size:12.5px;font-weight:700;color:#fb7185;display:inline-flex;align-items:center;gap:4px}
-.mac-sub{font-family:monospace;font-size:10.5px;color:var(--muted);margin-top:2px}
-.pin-btn{cursor:pointer;background:transparent;border:1px solid transparent;border-radius:5px;padding:1px 4px;font-size:11px;opacity:.75}
-.pin-btn:hover,.pin-btn.pinned{opacity:1;border-color:var(--acc);background:rgba(56,189,248,.14)}
-.spd-pills{display:flex;flex-direction:column;gap:4px;min-width:138px}
-.spd-p{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 8px;border-radius:7px;font-size:11.5px;font-weight:700;white-space:nowrap}
-.spd-p.dn{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:#34d399}
-.spd-p.up{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#f87171}
-.spd-meter{min-width:138px}
-.spd-pair{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;font-weight:600}
-.mbar{height:5px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:3px;display:flex;gap:1px}
-.mbar>i{display:block;height:100%;transition:width .25s}
-.q-cell{min-width:185px}
-.q-top{display:flex;align-items:center;gap:5px;font-size:11.5px;white-space:nowrap}
-.q-sub{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:11px;color:var(--muted);margin-top:4px;white-space:nowrap}
-.q-inline{display:flex;align-items:center;gap:4px;margin-top:4px}
-.cap-pair{display:flex;align-items:center;gap:5px;justify-content:center}
-.cap-box{display:inline-flex;align-items:center;gap:3px;border-radius:8px;padding:2px 5px;border:1px solid var(--brd);background:rgba(0,0,0,.28)}
-.cap-box.dn{border-color:rgba(16,185,129,.45)}
-.cap-box.up{border-color:rgba(239,68,68,.45)}
-.cap-box.unlocked{border-color:#06b6d4;background:rgba(6,182,212,.14);box-shadow:0 0 8px rgba(6,182,212,.3)}
-.cap-box input{background:transparent;border:none;outline:none;width:44px;text-align:center;font-size:12px;font-weight:700}
-.cap-box input.dirty{color:var(--warn)}
-.cap-lbl{font-size:10.5px;color:var(--muted);text-align:center;margin-top:3px}
-.cap-lbl.unlocked{color:#22d3ee;font-weight:700}
-.c-inline{display:flex;align-items:center;gap:4px}
-.act-cell{display:flex;align-items:center;gap:4px;white-space:nowrap}
-.act-cell .btn.sm{padding:5px 7px;min-width:30px}
-[data-theme="light"] .tinp,[data-theme="light"] .cap-box,[data-theme="light"] th{background:rgba(255,255,255,.78)}
-.btn.active-vip{background:linear-gradient(135deg,#9333ea,#c084fc);color:#fff;border-color:#e9d5ff;box-shadow:0 0 12px rgba(168,85,247,.55)}
-.btn.active-unlim{background:linear-gradient(135deg,#059669,#06b6d4);color:#fff;border-color:#a5f3fc;box-shadow:0 0 12px rgba(6,182,212,.55)}
-.btn.save-btn{opacity:.82}
-.btn.save-btn.dirty-save{opacity:1;background:linear-gradient(135deg,var(--pri),var(--pri2));border-color:transparent;color:#fff;box-shadow:0 0 10px rgba(225,29,72,.4)}
-canvas{width:100%;height:190px;display:block;border-radius:10px;background:var(--card)}
-.fg{margin-bottom:11px}
-.fg label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:600}
-.chk{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin:8px 0}
-.chk input{width:16px;height:16px;accent-color:var(--pri)}
-.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
-.modal-bg.open{display:flex}
-.modal{background:var(--bg2);border:1px solid var(--brd);border-radius:16px;padding:18px;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 50px rgba(0,0,0,.6)}
-.toast{position:fixed;bottom:18px;left:18px;background:var(--bg2);border:1px solid var(--pri2);color:var(--txt);padding:10px 16px;border-radius:11px;font-size:13px;font-weight:600;box-shadow:var(--sh);z-index:99;display:none}
-.banner{background:linear-gradient(90deg,#b91c1c,#f59e0b);color:#fff;padding:9px 14px;border-radius:10px;margin-bottom:12px;font-weight:700;text-align:center;display:none}
-.login-box{max-width:370px;margin:10vh auto;background:var(--glass);border:1px solid var(--brd);border-radius:18px;padding:24px;box-shadow:var(--sh);text-align:center}
-.hide{display:none!important}
+.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
 .g3{grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
-.zoom-cap{gap:4px;padding:3px 7px}.zoom-cap .btn{padding:1px 7px;min-width:24px;font-weight:800}
-.topo{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 16px}
-.topo-node{flex:1;min-width:130px;text-align:center;background:var(--card);border:1px solid var(--brd);border-radius:12px;padding:10px}
-.topo-pipe{flex:1;min-width:40px;height:4px;border-radius:99px;background:var(--brd);position:relative;overflow:hidden}
-.topo-pipe.on{background:linear-gradient(90deg,var(--ok),var(--acc));box-shadow:0 0 10px rgba(56,189,248,.45)}
-.ring-box{position:relative;width:116px;height:116px;margin:4px auto}
+.g4{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.card{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:13px 14px;box-shadow:var(--sh)}
+.sec-h{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding-bottom:8px;margin-bottom:10px;border-bottom:1px solid var(--brd)}
+.sec-h h2{font-size:calc(13.5px * var(--fs-k,1));font-weight:700;display:flex;align-items:center;gap:6px}
+.sec-badge{font-size:calc(11px * var(--fs-k,1));font-weight:600;padding:2px 8px;border-radius:4px;background:var(--surf-2);border:1px solid var(--brd);color:var(--muted)}
+
+/* OVERVIEW GROUPED CATEGORIES */
+.spd-pair{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px}
+.metric-tile{background:var(--bg-sub);border:1px solid var(--brd);border-radius:var(--r-sm);padding:8px 10px}
+.metric-lbl{font-size:calc(11px * var(--fs-k,1));color:var(--muted);display:flex;justify-content:space-between;margin-bottom:2px;font-weight:600}
+.metric-val{font-size:calc(17px * var(--fs-k,1));font-weight:700;line-height:1.25}
+.metric-sub{font-size:calc(10.5px * var(--fs-k,1));color:var(--muted);margin-top:2px}
+.gauge-wrap{background:var(--bg-sub);border:1px solid var(--brd);border-radius:var(--r-sm);padding:9px 11px;margin-bottom:10px}
+.gauge-top{display:flex;justify-content:space-between;align-items:center;font-size:calc(11px * var(--fs-k,1));margin-bottom:6px}
+.gauge-track{position:relative;height:12px;border-radius:4px;background:var(--surf-2);border:1px solid var(--brd);overflow:hidden}
+.gauge-fill{height:100%;background:linear-gradient(90deg,var(--ok),var(--pri));transition:width .35s ease}
+.gauge-up-fill{position:absolute;top:0;right:0;height:3px;background:var(--acc);transition:width .35s ease}
+.gauge-needle{position:absolute;top:-1px;bottom:-1px;width:2px;background:var(--txt);box-shadow:0 0 0 1px var(--bg);transition:right .35s ease}
+.gauge-ticks{display:flex;justify-content:space-between;font-size:calc(10px * var(--fs-k,1));color:var(--muted);margin-top:4px;direction:ltr}
+
+.quota-hero{display:flex;align-items:center;gap:13px;margin-bottom:10px}
+.ring-box{position:relative;width:82px;height:82px;flex-shrink:0}
 .ring-svg{width:100%;height:100%;transform:rotate(-90deg)}
-.ring-bg{fill:none;stroke:rgba(255,255,255,.08);stroke-width:10}
-[data-theme="light"] .ring-bg{stroke:rgba(15,23,42,.1)}
-.ring-fg{fill:none;stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .4s}
-.ring-lbl{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
-.pred-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;font-size:12px;font-weight:700;margin-top:8px}
-.pred-pill.ok{background:rgba(16,185,129,.16);color:#34d399;border:1px solid rgba(16,185,129,.35)}
-.pred-pill.warn{background:rgba(245,158,11,.16);color:#fbbf24;border:1px solid rgba(245,158,11,.35)}
-.alert-card{background:var(--card);border:1px solid var(--brd);border-radius:11px;padding:10px;margin-bottom:9px}
-.alert-card textarea{width:100%;min-height:62px;resize:vertical;font-size:12.5px;line-height:1.5;margin-top:5px}
-.var-chip{cursor:pointer;font-size:11px;padding:3px 8px;border-radius:7px;background:rgba(56,189,248,.14);border:1px solid rgba(56,189,248,.35);color:var(--acc);font-family:monospace}
+.ring-bg{fill:none;stroke:var(--surf-2);stroke-width:9}
+.ring-fg{fill:none;stroke:var(--pri);stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .4s}
+.ring-lbl{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring-lbl b{font-size:calc(14px * var(--fs-k,1));line-height:1.1}
+.ring-lbl small{font-size:calc(10px * var(--fs-k,1));color:var(--muted)}
+.kv-list{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.kv{background:var(--bg-sub);border:1px solid var(--brd);border-radius:var(--r-sm);padding:7px 9px}
+.kv small{display:block;font-size:calc(10.5px * var(--fs-k,1));color:var(--muted);margin-bottom:1px}
+.kv strong{font-size:calc(12px * var(--fs-k,1));font-weight:700}
+.pred-pill{margin-top:10px;padding:7px 10px;border-radius:var(--r-sm);font-size:calc(11.5px * var(--fs-k,1));font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.pred-pill.ok{background:rgba(16,185,129,.12);color:var(--ok)}
+.pred-pill.warn{background:rgba(234,179,8,.14);color:var(--warn)}
+
+.res-row{margin-bottom:9px}.res-row:last-child{margin-bottom:0}
+.res-lbl{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:calc(11.5px * var(--fs-k,1));margin-bottom:4px;white-space:nowrap}
+.res-lbl span:first-child{color:var(--muted);font-weight:600}
+.bar{height:6px;border-radius:3px;background:var(--surf-2);overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--pri);transition:width .35s}
+.bar.ok>i{background:var(--ok)}.bar.warn>i{background:var(--warn)}.bar.err>i{background:var(--err)}.bar.acc>i{background:var(--acc)}
+.sig-box{margin-top:10px;padding:9px 10px;border-radius:var(--r-sm);background:var(--bg-sub);border:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sig-bars{display:inline-flex;align-items:flex-end;gap:2.5px;height:16px}
+.sig-bars i{width:3.5px;border-radius:1px;background:var(--ok);display:block}
+.sig-bars i:nth-child(1){height:5px}.sig-bars i:nth-child(2){height:8px}.sig-bars i:nth-child(3){height:12px}.sig-bars i:nth-child(4){height:16px}
+.sig-bars.off i{background:var(--muted);opacity:.35}
+
+/* STAT CARDS (TAB DASH) */
+.stat-lbl{font-size:calc(11.5px * var(--fs-k,1));color:var(--muted);font-weight:600;margin-bottom:3px}
+.stat-val{font-size:calc(19px * var(--fs-k,1));font-weight:700;line-height:1.2}
+.stat-sub{font-size:calc(11px * var(--fs-k,1));color:var(--muted);margin-top:4px}
+
+/* CONTROLS, BUTTONS, INPUTS */
+.btn{
+  cursor:pointer;border:1px solid var(--brd);background:var(--surf);color:var(--txt);
+  padding:5px 10px;border-radius:var(--r-sm);font:inherit;font-size:calc(11.5px * var(--fs-k,1));font-weight:600;
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;transition:.14s;
+}
+.btn:hover{border-color:var(--brd-strong);background:var(--surf-2)}
+.btn.pri{background:var(--pri);color:var(--pri-fg);border-color:var(--pri)}
+.btn.ok{color:var(--ok)}.btn.warn{color:var(--warn)}.btn.err{color:var(--err)}
+.btn.vip{color:var(--vip)}.btn.active-vip{background:var(--vip);color:#fff;border-color:var(--vip)}
+.btn.active-unlim{background:var(--ok);color:#fff;border-color:var(--ok)}
+.btn.sm{padding:3.5px 8px;font-size:calc(11px * var(--fs-k,1))}
+.inp,select,textarea{
+  background:var(--bg-sub);border:1px solid var(--brd);border-radius:var(--r-sm);
+  padding:5px 8px;color:var(--txt);font:inherit;font-size:calc(11.5px * var(--fs-k,1));outline:none;width:100%;
+}
+.inp:focus,select:focus,textarea:focus{border-color:var(--pri)}
+.tinp{width:auto;padding:3px 6px;background:var(--bg-sub);border:1px solid var(--brd);border-radius:var(--r-sm);color:var(--txt);font:inherit;font-size:calc(11px * var(--fs-k,1));outline:none}
+.tinp:focus{border-color:var(--pri)}
+.inp.dirty,.tinp.dirty,input.dirty{border-color:var(--warn)!important;background:rgba(234,179,8,.08)}
+.save-btn.dirty-save{background:var(--warn);color:#fff;border-color:var(--warn)}
+.fg{margin-bottom:10px}.fg label{display:block;font-size:calc(11.5px * var(--fs-k,1));color:var(--muted);margin-bottom:4px;font-weight:600}
+.chk{display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:9px;font-size:calc(12px * var(--fs-k,1))}
+.chk input{width:15px;height:15px;accent-color:var(--pri)}
+.acts{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.filters{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+
+.dash-kpis{grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-bottom:10px}
+.dash-kpis .card{padding:8px 9px;border-radius:var(--r-sm);text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.dash-kpis .stat-lbl{font-size:calc(10px * var(--fs-k,1));margin-bottom:2px}
+.dash-kpis .stat-val{font-size:calc(14.5px * var(--fs-k,1));line-height:1.25}
+.dash-kpis .stat-sub{font-size:calc(10px * var(--fs-k,1));margin-top:2px}
+.dash-kpis .bar{width:100%;height:4px;margin-top:4px}
+/* TABLES & DEVICE CARDS */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:calc(11px * var(--fs-k,1))}
+th,td{padding:6px 5px;border-bottom:1px solid var(--brd);text-align:center;vertical-align:middle}
+th{color:var(--muted);font-size:calc(10.5px * var(--fs-k,1));font-weight:700;background:var(--bg-sub);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tr.blocked{opacity:.72}tr.vip{background:var(--pri-soft)}
+.badges{display:flex;gap:3px;flex-wrap:wrap;justify-content:center}
+.bdg{display:inline-flex;align-items:center;gap:3px;padding:1px 5px;border-radius:4px;font-size:calc(10px * var(--fs-k,1));font-weight:600;background:var(--surf-2);border:1px solid var(--brd)}
+.bdg.on{color:var(--ok)}.bdg.off{color:var(--muted)}.bdg.vip{color:var(--vip)}.bdg.blk{color:var(--err)}
+.dur-pill{display:inline-block;min-width:66px;text-align:center;font-size:calc(10.5px * var(--fs-k,1));color:var(--txt);background:var(--bg-sub);border:1px solid var(--brd);padding:1.5px 5px;border-radius:4px;white-space:nowrap}
+.dur-pill.off{color:var(--muted)}
+.ip-main{display:flex;align-items:center;justify-content:center;gap:4px;font-weight:600;font-family:var(--font-mono);font-size:calc(10.5px * var(--fs-k,1))}
+.mac-sub{font-family:var(--font-mono);font-size:calc(9.5px * var(--fs-k,1));color:var(--muted)}
+.pin-btn{cursor:pointer;border:none;background:transparent;padding:0 2px;font-size:11px;opacity:.55}.pin-btn.pinned{opacity:1}
+.spd-cell{min-width:128px;width:128px;background:linear-gradient(135deg,var(--pri-soft),transparent 78%);border-inline:1px solid var(--brd)}
+.spd-pills{display:flex;flex-direction:column;gap:2px;width:116px;margin:0 auto}
+.spd-p{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:calc(10.5px * var(--fs-k,1))}
+.spd-p .num{min-width:68px;text-align:left;white-space:nowrap}
+.spd-p.dn b{color:var(--ok)}.spd-p.up b{color:var(--pri)}
+.q-cell{min-width:168px;width:168px}.q-top{display:flex;align-items:center;justify-content:center;gap:4px;font-size:calc(10.5px * var(--fs-k,1))}
+[data-role="q-used"]{display:inline-block;min-width:96px;white-space:nowrap}
+.q-sub{display:flex;justify-content:space-between;font-size:calc(10px * var(--fs-k,1));color:var(--muted);margin-top:3px}
+.q-inline{display:flex;gap:4px;margin-top:4px;justify-content:center}
+.cap-pair{display:flex;gap:4px;align-items:center;justify-content:center}
+.cap-box{display:inline-flex;align-items:center;gap:3px;background:var(--bg-sub);border:1px solid var(--brd);border-radius:var(--r-sm);padding:2px 4px}
+.cap-box input{width:40px;border:none;background:transparent;background-color:transparent;color:var(--txt);font:inherit;font-size:calc(11px * var(--fs-k,1));text-align:center;outline:none}
+.cap-box.unlocked{border-color:var(--ok);background:rgba(16,185,129,.08)}
+.cap-lbl{font-size:calc(10px * var(--fs-k,1));color:var(--muted);margin-top:3px}
+.cap-lbl.unlocked{color:var(--ok);font-weight:700}
+.act-cell{display:flex;gap:4px;white-space:nowrap;justify-content:center}
+
+.dev-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:10px;align-items:start}
+.dev{background:var(--bg-sub);border:1px solid var(--brd);border-radius:var(--r);padding:11px;display:flex;flex-direction:column;gap:9px;width:100%;max-width:440px}
+.dev.blocked{opacity:.75}.dev.vip{border-color:var(--vip)}
+.dev-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.dev-meta{font-size:calc(11px * var(--fs-k,1));color:var(--muted)}
+
+canvas{width:100%;display:block;border-radius:var(--r-sm);background:var(--bg-sub);border:1px solid var(--brd)}
+.alert-card{background:var(--bg-sub);border:1px solid var(--brd);border-radius:var(--r-sm);padding:10px}
+.alert-card textarea{min-height:60px;resize:vertical;margin-top:5px}
+.var-chip{cursor:pointer;font-size:calc(11px * var(--fs-k,1));padding:3px 8px;border-radius:4px;background:var(--pri-soft);border:1px solid var(--brd);color:var(--pri);font-family:var(--font-mono)}
+.banner{background:var(--err);color:#fff;padding:8px 12px;border-radius:var(--r-sm);margin-bottom:12px;font-weight:700;text-align:center;display:none}
+.toast{position:fixed;bottom:16px;left:16px;background:var(--surf);border:1px solid var(--pri);color:var(--txt);padding:9px 14px;border-radius:var(--r-sm);font-size:calc(12px * var(--fs-k,1));font-weight:600;box-shadow:var(--sh);z-index:99;display:none}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:80}
+.modal-bg.open,.modal-bg.show{display:flex}
+.modal{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:16px;width:100%;max-width:420px;max-height:92vh;overflow-y:auto;box-shadow:var(--sh)}
+.login-box{max-width:360px;margin:10vh auto;background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);padding:22px;box-shadow:var(--sh);text-align:center}
 </style>
 </head>
 <body>
+
 <div id="loginView" class="login-box hide">
-  <div class="logo" style="margin:0 auto 12px;width:52px;height:52px;font-size:24px">R</div>
-  <h2 style="margin-bottom:6px">RouterMeter OS</h2>
-  <p style="color:var(--muted);font-size:13px;margin-bottom:18px">لوحة إدارة السرعات والباقات — TL-WR740N v4</p>
+  <div class="logo" style="margin:0 auto 10px;width:44px;height:44px;font-size:18px">R</div>
+  <h2 style="margin-bottom:4px;font-size:16px">RouterMeter OS</h2>
+  <p style="color:var(--muted);font-size:12px;margin-bottom:16px">لوحة إدارة السرعات والباقات — TL-WR740N v4</p>
   <form id="loginForm">
     <div class="fg" style="text-align:right"><label>اسم المستخدم</label><input class="inp" id="lUser" value="admin" required></div>
     <div class="fg" style="text-align:right"><label>كلمة المرور</label><input class="inp" id="lPass" type="password" value="admin" required></div>
-    <div id="loginErr" style="color:#f87171;font-size:12.5px;margin-bottom:10px"></div>
+    <div id="loginErr" style="color:var(--err);font-size:12px;margin-bottom:10px"></div>
     <button class="btn pri" style="width:100%" type="submit">دخول</button>
   </form>
 </div>
 
-<div id="appView" class="wrap hide">
-  <div id="rebootBanner" class="banner"></div>
+<div id="appView" class="hide">
   <header class="hdr">
     <div class="brand">
       <div class="logo">R</div>
       <div>
-        <h1>راوتر ميتر <span id="fwVer" style="font-size:11px;color:var(--pri2)">v1.0</span></h1>
-        <small>TP-Link TL-WR740N v4 • <span id="hdrWan">wan</span> • <span id="hdrUp">0s</span></small>
+        <h1>راوتر ميتر <span class="ver-tag num" id="fwVer">v1.0</span></h1>
+        <small>TL-WR740N v4 • <span class="code" id="hdrWan">eth1</span> • <span id="hdrUp">0د</span></small>
       </div>
     </div>
     <div class="hdr-ctrl">
       <span class="pill"><span id="connDot" class="dot"></span><span id="connTxt">متصل</span></span>
-      <div class="pill zoom-cap" title="تكبير أو تصغير حجم الواجهة">
-        <button class="btn sm" type="button" onclick="chgZoom(-5)">-</button>
-        <span id="zoomLbl" style="cursor:pointer;font-size:11.5px;font-weight:700" onclick="setZoom(100)">100%</span>
-        <button class="btn sm" type="button" onclick="chgZoom(5)">+</button>
-      </div>
-      <select id="themeSel" style="width:auto;padding:5px 9px;font-size:12px">
-        <option value="">قرمزي داكن</option>
-        <option value="sunset">غروب كوني</option>
-        <option value="cyber">سايبر ماتريكس</option>
-        <option value="light">نهاري زجاجي</option>
+      <select class="hdr-sel" id="fontSel" title="اختيار نوع الخط">
+        <option value="IBM Plex Sans Arabic">خط: IBM Plex</option>
+        <option value="Readex Pro">خط: Readex Pro</option>
+        <option value="Alexandria">خط: Alexandria</option>
+        <option value="Rubik">خط: Rubik</option>
+        <option value="Almarai">خط: Almarai</option>
+        <option value="Cairo">خط: Cairo</option>
+        <option value="system-ui">خط: النظام</option>
       </select>
-      <button id="authBtn" class="btn sm err" onclick="handleAuthClick()">خروج</button>
+      <div class="fs-group" title="حجم الخط">
+        <button type="button" onclick="chgFontSize(-0.5)">A-</button>
+        <span class="num" id="fsLbl">12.5</span>
+        <button type="button" onclick="chgFontSize(0.5)">A+</button>
+      </div>
+      <div class="fs-group" title="تكبير الواجهة">
+        <button type="button" onclick="chgZoom(-5)">-</button>
+        <span class="num" id="zoomLbl" style="cursor:pointer" onclick="setZoom(100)">100%</span>
+        <button type="button" onclick="chgZoom(5)">+</button>
+      </div>
+      <select class="hdr-sel" id="themeSel" title="اختيار الثيم">
+        <option value="forest">شبكات زمردي</option>
+        <option value="swiss">سويسري نحاسي</option>
+        <option value="petrol">تيليكوم بترولي</option>
+        <option value="olive">معماري زيتوني</option>
+        <option value="ink">حبر أحادي</option>
+      </select>
+      <button class="btn sm" id="modeBtn" type="button" onclick="toggleMode()">☀️ فاتح</button>
+      <button id="authBtn" class="btn sm err" type="button" onclick="handleAuthClick()">خروج</button>
     </div>
   </header>
 
   <nav class="tabs" id="navTabs">
-    <button class="tab" data-t="ov">📊 نظرة عامة</button>
-    <button class="tab active" data-t="dash">لوحة التحكم والأجهزة</button>
-    <button class="tab" data-t="quota">الباقة والمعايرة</button>
-    <button class="tab" data-t="net">الوايفاي والإنترنت</button>
-    <button class="tab" data-t="tg">بوت تليجرام</button>
-    <button class="tab" data-t="sys">المراقبة والتحديث OTA</button>
+    <div class="side-lbl">المراقبة</div>
+    <button class="tab active" data-t="ov">
+      <svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 14 4-4 4 3 5-6"/></svg>
+      نظرة عامة
+    </button>
+    <button class="tab" data-t="dash">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      لوحة التحكم والأجهزة
+    </button>
+    <div class="side-lbl">الشبكة والباقة</div>
+    <button class="tab" data-t="quota">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+      الباقة والمعايرة
+    </button>
+    <button class="tab" data-t="net">
+      <svg viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+      الوايفاي والإنترنت
+    </button>
+    <div class="side-lbl">الأتمتة والنظام</div>
+    <button class="tab" data-t="tg">
+      <svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+      بوت تليجرام
+    </button>
+    <button class="tab" data-t="fazakkir">
+      <svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      فذكر (الصلاة والأذكار)
+    </button>
+    <button class="tab" data-t="sys">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.77 1 1.51 1H21a2 2 0 0 1 0 4h-.09c-.74 0-1.25.4-1.51 1Z"/></svg>
+      المراقبة والتحديث OTA
+    </button>
+    <div class="side-foot">
+      <div class="uptime-box">
+        <div class="uptime-lbl"><span>مدة تشغيل الجهاز</span><span class="dot"></span></div>
+        <div class="uptime-grid num">
+          <div class="uptime-cell"><b id="upDays">0</b><small>يوم</small></div>
+          <div class="uptime-cell"><b id="upHrs">0</b><small>ساعة</small></div>
+          <div class="uptime-cell"><b id="upMins">0</b><small>دقيقة</small></div>
+        </div>
+      </div>
+      <div>
+        <div>وقت الراوتر</div>
+        <div class="code" id="sideClock" style="color:var(--txt);font-weight:600">-</div>
+      </div>
+    </div>
   </nav>
 
-  <!-- TAB 0: OVERVIEW ANALYTICS -->
-  <section id="tab-ov" class="panel">
-    <div class="card topo" style="margin-bottom:12px">
-      <div class="topo-node">
-        <div style="font-size:20px">🌐</div>
-        <b id="ovWanIf">WAN</b>
-        <div style="font-size:11.5px;color:var(--muted)" id="ovWanState">متصل</div>
-      </div>
-      <div class="topo-pipe" id="ovPipe1"></div>
-      <div class="topo-node" style="border-color:var(--pri2)">
-        <div style="font-size:20px">📡</div>
-        <b>RouterMeter OS</b>
-        <div style="font-size:11.5px;color:var(--muted)">WR740N v4 • <span id="ovClock">-</span></div>
-      </div>
-      <div class="topo-pipe" id="ovPipe2"></div>
-      <div class="topo-node">
-        <div style="font-size:20px">👥</div>
-        <b id="ovLanCnt">0 متصل</b>
-        <div style="font-size:11.5px;color:var(--muted)" id="ovWifiInfo">Wi-Fi • 2.4GHz</div>
-      </div>
-    </div>
+  <main class="main">
+    <div id="rebootBanner" class="banner"></div>
 
-    <div class="grid g3">
-      <div class="card">
-        <div class="sec-h"><h2>🧠 موارد الراوتر والوايفاي</h2></div>
-        <div class="stat-lbl">الرام المتاحة: <b id="ovRamTxt">-</b></div>
-        <div class="bar ok" id="ovRamBar"><i style="width:0%"></i></div>
-        <div class="stat-lbl" style="margin-top:12px">الأجهزة النشطة: <b id="ovCliTxt">0 / 0</b></div>
-        <div class="bar" id="ovCliBar"><i style="width:0%"></i></div>
-        <div class="stat-sub" style="margin-top:10px">شبكة الوايفاي: <b id="ovSsidTxt">-</b> (<span id="ovChTxt">CH auto</span>)</div>
-        <div class="acts" style="margin-top:14px">
-          <button class="btn sm pri" onclick="goTab('dash')">👥 إدارة الأجهزة</button>
-          <button class="btn sm ok" onclick="goTab('sys')">🚀 OTA والنظام</button>
-          <button class="btn sm warn" onclick="goTab('tg')">🤖 تليجرام</button>
-        </div>
-      </div>
+    <!-- TAB 0 (DEFAULT): OVERVIEW ANALYTICS -->
+    <section id="tab-ov" class="panel active">
+      <div class="grid g3" style="margin-bottom:12px">
 
-      <div class="card" style="text-align:center">
-        <div class="sec-h" style="justify-content:center"><h2>🎯 تحليل الباقة والتنبؤ</h2></div>
-        <div class="ring-box">
-          <svg class="ring-svg" viewBox="0 0 120 120">
-            <circle class="ring-bg" cx="60" cy="60" r="50"></circle>
-            <circle class="ring-fg" id="ovQuotaRing" cx="60" cy="60" r="50" stroke="var(--acc)" stroke-dasharray="314" stroke-dashoffset="314"></circle>
-          </svg>
-          <div class="ring-lbl">
-            <b id="ovQuotaPct" style="font-size:18px">0%</b>
-            <small style="font-size:10.5px;color:var(--muted)">مستهلك</small>
+        <!-- 1. SPEED & INTERACTIVE LIVE GAUGE -->
+        <div class="card">
+          <div class="sec-h">
+            <h2>⚡ السرعة الحالية والذروة</h2>
+            <span class="sec-badge" id="ovCapLbl">مباشر</span>
           </div>
-        </div>
-        <div style="font-size:12.5px;margin-top:6px">المتبقي: <b id="ovQuotaRem">-</b> • المتبقي بالدورة: <b id="ovRemDays">-</b> يوم</div>
-        <div style="font-size:12.5px;color:var(--muted);margin-top:4px">المعدل اليومي الآمن: <b id="ovSafeRate" style="color:var(--ok)">-</b></div>
-        <div id="ovPredPill" class="pred-pill ok">⏳ جاري التحليل...</div>
-      </div>
-
-      <div class="card">
-        <div class="sec-h"><h2>⚡ السرعة اللحظية</h2><span style="font-size:11.5px;color:var(--muted)">الذروة: <b id="ovPeakTxt">-</b></span></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:center;margin-bottom:8px">
-          <div>
-            <div class="ring-box" style="width:88px;height:88px">
-              <svg class="ring-svg" viewBox="0 0 120 120">
-                <circle class="ring-bg" cx="60" cy="60" r="50"></circle>
-                <circle class="ring-fg" id="ovDnRing" cx="60" cy="60" r="50" stroke="#34d399" stroke-dasharray="314" stroke-dashoffset="314"></circle>
-              </svg>
-              <div class="ring-lbl"><b id="ovDnVal" style="font-size:12px">0</b><small style="font-size:9.5px;color:var(--muted)">⬇️ تنزيل</small></div>
+          <div class="spd-pair">
+            <div class="metric-tile">
+              <div class="metric-lbl"><span>التحميل الكلي</span><span class="num">↓ RX</span></div>
+              <div class="metric-val num" style="color:var(--ok)" id="ovDnVal">0 bps</div>
+              <div class="metric-sub">الذروة: <strong class="num" id="ovPeakD">0 bps</strong></div>
+            </div>
+            <div class="metric-tile">
+              <div class="metric-lbl"><span>الرفع الكلي</span><span class="num">↑ TX</span></div>
+              <div class="metric-val num" style="color:var(--pri)" id="ovUpVal">0 bps</div>
+              <div class="metric-sub">الذروة: <strong class="num" id="ovPeakU">0 bps</strong></div>
             </div>
           </div>
-          <div>
-            <div class="ring-box" style="width:88px;height:88px">
-              <svg class="ring-svg" viewBox="0 0 120 120">
-                <circle class="ring-bg" cx="60" cy="60" r="50"></circle>
-                <circle class="ring-fg" id="ovUpRing" cx="60" cy="60" r="50" stroke="#fb7185" stroke-dasharray="314" stroke-dashoffset="314"></circle>
+          <div class="gauge-wrap">
+            <div class="gauge-top">
+              <span style="color:var(--muted);font-weight:600">مؤشر السحب اللحظي</span>
+              <strong class="num" id="ovGaugePct">0%</strong>
+            </div>
+            <div class="gauge-track">
+              <div class="gauge-fill" id="ovGaugeFill" style="width:0%"></div>
+              <div class="gauge-up-fill" id="ovGaugeUpFill" style="width:0%"></div>
+              <div class="gauge-needle" id="ovGaugeNeedle" style="right:0%"></div>
+            </div>
+            <div class="gauge-ticks" id="ovGaugeTicks"><span>0</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+          </div>
+          <canvas id="ovChart" width="420" height="86" style="height:86px"></canvas>
+        </div>
+
+        <!-- 2. QUOTA & SAFE DAILY BUDGET -->
+        <div class="card">
+          <div class="sec-h">
+            <h2>🎯 الكوته وتفاصيل الباقة</h2>
+            <span class="sec-badge" id="ovCycleBadge">الدورة</span>
+          </div>
+          <div class="quota-hero">
+            <div class="ring-box">
+              <svg class="ring-svg" viewBox="0 0 100 100">
+                <circle class="ring-bg" cx="50" cy="50" r="41"></circle>
+                <circle class="ring-fg" id="ovQuotaRing" cx="50" cy="50" r="41" stroke-dasharray="257.6" stroke-dashoffset="257.6"></circle>
               </svg>
-              <div class="ring-lbl"><b id="ovUpVal" style="font-size:12px">0</b><small style="font-size:9.5px;color:var(--muted)">⬆️ رفع</small></div>
+              <div class="ring-lbl">
+                <b class="num" id="ovQuotaPct">0%</b>
+                <small>مستهلك</small>
+              </div>
+            </div>
+            <div style="flex:1">
+              <div style="font-size:11px;color:var(--muted)">المتبقي من الباقة</div>
+              <div class="num" style="font-size:20px;font-weight:700" id="ovQuotaRem">-</div>
+              <div style="font-size:11px;color:var(--muted)" id="ovQuotaSub">-</div>
+            </div>
+          </div>
+          <div class="kv-list">
+            <div class="kv"><small>الحد اليومي الآمن</small><strong style="color:var(--ok)" id="ovSafeRate">-</strong></div>
+            <div class="kv"><small>متوسط استهلاكك الفعلي</small><strong id="ovAvgRate">-</strong></div>
+            <div class="kv"><small>الأيام المتبقية بالدورة</small><strong id="ovRemDays">-</strong></div>
+            <div class="kv"><small>تاريخ انتهاء الباقة</small><strong class="num" id="ovEndDate">-</strong></div>
+          </div>
+          <div id="ovPredPill" class="pred-pill ok"><span>⏳ جاري التحليل...</span><span id="ovPredSub"></span></div>
+        </div>
+
+        <!-- 3. ROUTER RESOURCES & WIFI TX SIGNAL -->
+        <div class="card">
+          <div class="sec-h">
+            <h2>🧠 موارد الراوتر وقوة الإشارة</h2>
+            <span class="sec-badge code">AR9331</span>
+          </div>
+          <div class="res-row">
+            <div class="res-lbl"><span>الذاكرة (RAM) المستخدمة</span><strong id="ovRamTxt">-</strong></div>
+            <div class="bar" id="ovRamBar"><i style="width:0%"></i></div>
+          </div>
+          <div class="res-row">
+            <div class="res-lbl"><span>حمل المعالج (CPU Load)</span><strong id="ovCpuTxt">-</strong></div>
+            <div class="bar ok" id="ovCpuBar"><i style="width:0%"></i></div>
+          </div>
+          <div class="res-row">
+            <div class="res-lbl"><span>مساحة الفلاش (JFFS2)</span><strong id="ovFlashTxt">-</strong></div>
+            <div class="bar acc" id="ovFlashBar"><i style="width:0%"></i></div>
+          </div>
+          <div class="res-row">
+            <div class="res-lbl"><span>الأجهزة النشطة الآن</span><strong id="ovCliTxt">0 / 0</strong></div>
+            <div class="bar ok" id="ovCliBar"><i style="width:0%"></i></div>
+          </div>
+          <div class="sig-box">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="sig-bars" id="ovSigBars"><i></i><i></i><i></i><i></i></div>
+              <div>
+                <div style="font-size:11.5px;font-weight:700">قوة إشارة الوايفاي (<span class="code">wlan0</span>)</div>
+                <div style="font-size:11px;color:var(--muted)"><b id="ovSsidTxt">-</b> • <span id="ovChTxt">CH auto</span></div>
+              </div>
+            </div>
+            <div style="text-align:left">
+              <div class="num" style="font-size:14px;font-weight:700;color:var(--ok)" id="ovTxpVal">-</div>
+              <div style="font-size:10.5px;color:var(--muted)" id="ovSigVal">عملاء: -</div>
             </div>
           </div>
         </div>
-        <canvas id="ovChart" width="420" height="90" style="height:90px"></canvas>
       </div>
-    </div>
-  </section>
 
-  <!-- TAB 1: DASHBOARD -->
-  <section id="tab-dash" class="panel active">
-    <div class="grid g4" style="margin-bottom:12px">
+      <!-- QUICK TOPOLOGY & DIRECT ACCESS -->
       <div class="card">
-        <div class="stat-lbl">سرعة التحميل الكلية</div>
-        <div class="stat-val" id="sDown" style="color:var(--acc)">0 Kbps</div>
-        <div class="stat-sub">ذروة الجلسة: <span id="sPeakD">0 Kbps</span></div>
-      </div>
-      <div class="card">
-        <div class="stat-lbl">سرعة الرفع الكلية</div>
-        <div class="stat-val" id="sUp" style="color:var(--pri2)">0 Kbps</div>
-        <div class="stat-sub">ذروة الجلسة: <span id="sPeakU">0 Kbps</span></div>
-      </div>
-      <div class="card">
-        <div class="stat-lbl">إجمالي استهلاك الباقة</div>
-        <div class="stat-val" id="sUsed">0 GB</div>
-        <div class="stat-sub" id="sMainQ">من غير محدود</div>
-        <div class="bar" id="mainBar"><i style="width:0%"></i></div>
-      </div>
-      <div class="card">
-        <div class="stat-lbl">الأجهزة المتصلة / الرام</div>
-        <div class="stat-val"><span id="sOnline">0</span> <small style="font-size:14px;color:var(--muted)">/ <span id="sTotalDev">0</span></small></div>
-        <div class="stat-sub">رام متاحة: <span id="sRam">-</span></div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-bottom:12px">
-      <div class="sec-h" style="margin-bottom:8px">
-        <h2>مخطط السرعة المباشر (آخر 60 ثانية)</h2>
-        <span style="font-size:12px;color:var(--muted)">
-          <span style="color:var(--acc)">■ تحميل</span> &nbsp; <span style="color:var(--pri2)">■ رفع</span>
-        </span>
-      </div>
-      <canvas id="spdChart" width="900" height="190"></canvas>
-    </div>
-
-    <div class="card" style="margin-bottom:12px">
-      <div class="sec-h">
-        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-          <span class="dot"></span>
-          <h2>الأجهزة المتصلة حالياً</h2>
-          <span class="sec-badge" id="onBadge">0 متصل</span>
-          <small style="color:var(--muted);font-size:12px">تحديث لحظي للسرعة ومعدل النقل</small>
+        <div class="sec-h">
+          <h2>🔌 حالة الاتصال والوصول المباشر</h2>
+          <div class="acts">
+            <button class="btn sm pri" onclick="goTab('dash')">👥 إدارة الأجهزة</button>
+            <button class="btn sm ok" onclick="goTab('sys')">🚀 OTA والنظام</button>
+            <button class="btn sm warn" onclick="goTab('tg')">🤖 تليجرام</button>
+          </div>
         </div>
-        <div class="filters">
-          <input class="inp" id="devSearch" placeholder="بحث بالاسم / IP / MAC" style="width:180px">
-          <select id="devFilter" style="width:auto">
-            <option value="all">الكل</option>
-            <option value="on">المتصلة الآن</option>
-            <option value="blk">المحظورة</option>
-            <option value="vip">VIP ألعاب</option>
-          </select>
-          <button class="btn sm" id="viewBtn" onclick="toggleView()">عرض بطاقات</button>
-          <button class="btn sm warn" onclick="resetAllUsage()">تصفير كل العدادات</button>
+        <div class="kv-list" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+          <div class="kv"><small>منفذ الإنترنت (WAN)</small><strong id="ovWanIf">WAN</strong> <span style="font-size:11px;color:var(--muted)" id="ovWanState">-</span></div>
+          <div class="kv"><small>الأجهزة المتصلة (LAN)</small><strong id="ovLanCnt">0 متصل</strong></div>
+          <div class="kv"><small>حالة الوايفاي</small><strong id="ovWifiInfo">Wi-Fi • 2.4GHz</strong></div>
+          <div class="kv"><small>ساعة الراوتر</small><strong class="code" id="ovClock">-</strong></div>
         </div>
       </div>
-      <div id="devCardsOn" class="dev-grid hide"></div>
-      <div id="devTableOn" class="tbl-wrap">
-        <table>
-          <thead><tr><th>الحالة</th><th>اسم الجهاز</th><th>مدة الاتصال</th><th>IP / MAC</th><th>السرعة اللحظية</th><th>الباقة والاستهلاك</th><th>تحديد السرعة</th><th>معرف التيليجرام</th><th>الإجراءات</th></tr></thead>
-          <tbody id="devTbodyOn"></tbody>
-        </table>
-      </div>
-    </div>
+    </section>
 
-    <div class="card" id="offlineCard">
-      <div class="sec-h" style="margin-bottom:0">
-        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-          <span class="dot off" style="background:var(--muted);box-shadow:none"></span>
-          <h2>الأجهزة غير المتصلة</h2>
-          <span class="sec-badge off" id="offBadge">0 غير متصل</span>
+    <!-- TAB 1: DASHBOARD -->
+    <section id="tab-dash" class="panel">
+      <div class="grid dash-kpis">
+        <div class="card">
+          <div class="stat-lbl">سرعة التحميل الكلية</div>
+          <div class="stat-val num" id="sDown" style="color:var(--ok)">0 Kbps</div>
+          <div class="stat-sub">ذروة: <span class="num" id="sPeakD">0 Kbps</span></div>
         </div>
-        <button class="btn sm" id="offToggleBtn" onclick="toggleOffline()">إظهار الأجهزة غير المتصلة</button>
+        <div class="card">
+          <div class="stat-lbl">سرعة الرفع الكلية</div>
+          <div class="stat-val num" id="sUp" style="color:var(--pri)">0 Kbps</div>
+          <div class="stat-sub">ذروة: <span class="num" id="sPeakU">0 Kbps</span></div>
+        </div>
+        <div class="card">
+          <div class="stat-lbl">استهلاك الباقة</div>
+          <div class="stat-val num" id="sUsed">0 GB</div>
+          <div class="stat-sub" id="sMainQ">من غير محدود</div>
+          <div class="stat-sub">المتبقي: <strong class="num" id="sRemQ" style="color:var(--ok)">-</strong></div>
+          <div class="bar" id="mainBar"><i style="width:0%"></i></div>
+        </div>
+        <div class="card">
+          <div class="stat-lbl">الأجهزة المتصلة</div>
+          <div class="stat-val num"><span id="sOnline">0</span> <small style="font-size:11px;color:var(--muted)">/ <span id="sTotalDev">0</span></small></div>
+          <div class="stat-sub">غير متصل: <span class="num" id="sOffline">0</span></div>
+        </div>
+        <div class="card">
+          <div class="stat-lbl">المعالج والرام</div>
+          <div class="stat-val num" id="sRam">-</div>
+          <div class="stat-sub">CPU: <span class="num" id="sCpu">-</span> • متاح: <span class="num" id="sRamFree">-</span></div>
+          <div class="bar" id="sRamBar"><i style="width:0%"></i></div>
+        </div>
+        <div class="card">
+          <div class="stat-lbl">الاتصال والوايفاي</div>
+          <div class="stat-val" id="sWifiSsid" style="color:var(--acc);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">-</div>
+          <div class="stat-sub num" id="sWifiMeta">-</div>
+          <div class="stat-sub num" id="sConnMeta">-</div>
+        </div>
       </div>
-      <div id="offlineWrap" class="hide" style="margin-top:12px">
-        <div id="devCardsOff" class="dev-grid hide"></div>
-        <div id="devTableOff" class="tbl-wrap">
+
+      <div class="card" style="margin-bottom:12px">
+        <div class="sec-h">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="dot"></span>
+            <h2>الأجهزة المتصلة حالياً</h2>
+            <span class="sec-badge" id="onBadge">0 متصل</span>
+          </div>
+          <div class="filters">
+            <input class="inp" id="devSearch" placeholder="بحث بالاسم / IP / MAC" style="width:170px">
+            <select id="devFilter" style="width:auto">
+              <option value="all">الكل</option>
+              <option value="on">المتصلة الآن</option>
+              <option value="blk">المحظورة</option>
+              <option value="vip">VIP ألعاب</option>
+            </select>
+            <button class="btn sm" id="viewBtn" onclick="toggleView()">عرض بطاقات</button>
+            <button class="btn sm warn" onclick="resetAllUsage()">تصفير كل العدادات</button>
+          </div>
+        </div>
+        <div id="devCardsOn" class="dev-grid hide"></div>
+        <div id="devTableOn" class="tbl-wrap">
           <table>
             <thead><tr><th>الحالة</th><th>اسم الجهاز</th><th>مدة الاتصال</th><th>IP / MAC</th><th>السرعة اللحظية</th><th>الباقة والاستهلاك</th><th>تحديد السرعة</th><th>معرف التيليجرام</th><th>الإجراءات</th></tr></thead>
-            <tbody id="devTbodyOff"></tbody>
+            <tbody id="devTbodyOn"></tbody>
           </table>
         </div>
       </div>
-    </div>
-    <datalist id="tgUsersDL"></datalist>
-  </section>
 
-  <!-- TAB 2: QUOTA & SCALE -->
-  <section id="tab-quota" class="panel">
-    <div class="grid g2">
-      <div class="card">
-        <div class="sec-h"><h2>إعدادات الباقة الرئيسية وفترة الفوترة</h2></div>
-        <div class="fg"><label>إجمالي الباقة بالجيجابايت (0 = بدون حد)</label><input class="inp" id="qMainGb" type="number" step="0.1" min="0"></div>
-        <div class="grid g2">
-          <div class="fg"><label>تاريخ البداية</label><input class="inp" id="qStart" type="date"></div>
-          <div class="fg"><label>تاريخ الانتهاء</label><input class="inp" id="qEnd" type="date"></div>
-        </div>
-        <div class="fg"><label>مدة الدورة (أيام)</label><input class="inp" id="qDays" type="number" min="1" max="365"></div>
-        <div class="grid g2">
-          <div class="fg"><label>محدد سرعة التحميل الكلي للإنترنت Mbps (0 = مفتوح / 100 لـ VIP)</label><input class="inp" id="qWanD" type="number" step="0.5" min="0"></div>
-          <div class="fg"><label>محدد سرعة الرفع الكلي Mbps (0 = مفتوح / 100 لـ VIP)</label><input class="inp" id="qWanU" type="number" step="0.5" min="0"></div>
-        </div>
-        <button class="btn pri" onclick="saveMainQuota()">حفظ إعدادات الباقة</button>
-      </div>
-      <div class="card">
-        <div class="sec-h"><h2>معايرة العداد (Standard & Scale)</h2></div>
-        <div class="fg"><label>معيار حساب الجيجابايت</label>
-          <select id="qStd">
-            <option value="1024">1024 MiB = 1 GiB (قياسي)</option>
-            <option value="1000">1000 MB = 1 GB (شركات الاتصالات)</option>
-          </select>
-        </div>
-        <div class="fg"><label>نسبة المعايرة (%): <b id="qPctLbl">100%</b> (لمطابقة فاتورة الشركة 50% - 200%)</label>
-          <input id="qPct" type="range" min="50" max="200" value="100" style="width:100%" oninput="document.getElementById('qPctLbl').textContent=this.value+'%'">
-        </div>
-        <div class="fg"><label>وضع المعايرة</label>
-          <select id="qMode">
-            <option value="0">تطبيق نسبة المعايرة (%)</option>
-            <option value="1">بدون تعديل (القراءة الخام 100%)</option>
-          </select>
-        </div>
-        <button class="btn pri" onclick="saveMeterScale()">حفظ المعايرة</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- TAB 3: NATIVE WIFI & WAN -->
-  <section id="tab-net" class="panel">
-    <div class="grid g2">
-      <div class="card">
-        <div class="sec-h"><h2>إعدادات الوايفاي الأصلية (ath9k)</h2><button class="btn sm" onclick="loadNetInfo()">تحديث</button></div>
-        <div class="fg"><label>اسم الشبكة (SSID)</label><input class="inp" id="wSsid"></div>
-        <div class="fg"><label>كلمة مرور الوايفاي (8 أحرف فأكثر)</label><input class="inp" id="wKey" type="password"></div>
-        <div class="grid g2">
-          <div class="fg"><label>التشفير</label>
-            <select id="wEnc"><option value="psk2">WPA2-PSK (مستحسن)</option><option value="psk-mixed">WPA/WPA2 المختلط</option><option value="none">مفتوح</option></select>
+      <div class="card" id="offlineCard">
+        <div class="sec-h" style="margin-bottom:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="dot off"></span>
+            <h2>الأجهزة غير المتصلة</h2>
+            <span class="sec-badge" id="offBadge">0 غير متصل</span>
           </div>
-          <div class="fg"><label>القناة</label>
-            <select id="wChan"><option value="auto">تلقائي (Auto)</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option></select>
+          <button class="btn sm" id="offToggleBtn" onclick="toggleOffline()">إظهار الأجهزة غير المتصلة</button>
+        </div>
+        <div id="offlineWrap" class="hide" style="margin-top:12px">
+          <div id="devCardsOff" class="dev-grid hide"></div>
+          <div id="devTableOff" class="tbl-wrap">
+            <table>
+              <thead><tr><th>الحالة</th><th>اسم الجهاز</th><th>مدة الاتصال</th><th>IP / MAC</th><th>السرعة اللحظية</th><th>الباقة والاستهلاك</th><th>تحديد السرعة</th><th>معرف التيليجرام</th><th>الإجراءات</th></tr></thead>
+              <tbody id="devTbodyOff"></tbody>
+            </table>
           </div>
         </div>
-        <div class="grid g2">
-          <div class="fg"><label>عرض النطاق</label><select id="wHt"><option value="HT40">40 MHz (أقصى سرعة 150Mbps)</option><option value="HT20">20 MHz (استقرار أعلى)</option></select></div>
-          <div class="fg"><label>قوة البث (dBm)</label><input class="inp" id="wTxp" placeholder="تلقائي (18 لأقصى قوة)"></div>
-        </div>
-        <div class="fg"><label>نطاق القنوات والطاقة (Country)</label>
-          <select id="wCountry">
-            <option value="JP">JP — أقصى طاقة 18 dBm + قنوات 12 و13 (مستحسن)</option>
-            <option value="TW">TW — طاقة 16 dBm + قنوات 12 و13</option>
-            <option value="US">US — طاقة 16 dBm (قنوات 1–11 فقط)</option>
-            <option value="EG">EG — مصر/أوروبا 13 dBm + قنوات 12 و13</option>
-          </select>
-        </div>
-        <label class="chk"><input type="checkbox" id="wDis"> تعطيل الوايفاي مؤقتاً</label>
       </div>
-      <div class="card">
-        <div class="sec-h"><h2>إعدادات منفذ الإنترنت (WAN)</h2></div>
-        <div class="fg"><label>نوع الاتصال</label>
-          <select id="wanProto" onchange="toggleWanFields()">
-            <option value="dhcp">DHCP تلقائي (خلف راوتر/مودم)</option>
-            <option value="static">IP ثابت (Static)</option>
-            <option value="pppoe">PPPoE (اسم مستخدم وكلمة مرور)</option>
-          </select>
-        </div>
-        <div id="wanStatic" class="hide">
+      <datalist id="tgUsersDL"></datalist>
+    </section>
+
+    <!-- TAB 2: QUOTA & SCALE -->
+    <section id="tab-quota" class="panel">
+      <div class="grid g2">
+        <div class="card">
+          <div class="sec-h"><h2>إعدادات الباقة الرئيسية وفترة الفوترة</h2></div>
+          <div class="fg"><label>إجمالي الباقة بالجيجابايت (0 = بدون حد)</label><input class="inp" id="qMainGb" type="number" step="0.1" min="0"></div>
           <div class="grid g2">
-            <div class="fg"><label>IP Address</label><input class="inp" id="wanIp"></div>
-            <div class="fg"><label>Netmask</label><input class="inp" id="wanMask" placeholder="255.255.255.0"></div>
+            <div class="fg"><label>تاريخ البداية</label><input class="inp" id="qStart" type="date"></div>
+            <div class="fg"><label>تاريخ الانتهاء</label><input class="inp" id="qEnd" type="date"></div>
           </div>
-          <div class="fg"><label>Gateway</label><input class="inp" id="wanGw"></div>
+          <div class="fg"><label>مدة الدورة (أيام)</label><input class="inp" id="qDays" type="number" min="1" max="365"></div>
+          <div class="grid g2">
+            <div class="fg"><label>محدد سرعة التحميل الكلي للإنترنت Mbps (0 = مفتوح / 100 لـ VIP)</label><input class="inp" id="qWanD" type="number" step="0.5" min="0"></div>
+            <div class="fg"><label>محدد سرعة الرفع الكلي Mbps (0 = مفتوح / 100 لـ VIP)</label><input class="inp" id="qWanU" type="number" step="0.5" min="0"></div>
+          </div>
+          <button class="btn pri" onclick="saveMainQuota()">حفظ إعدادات الباقة</button>
         </div>
-        <div id="wanPppoe" class="hide">
-          <div class="fg"><label>اسم مستخدم PPPoE</label><input class="inp" id="wanUser"></div>
-          <div class="fg"><label>كلمة مرور PPPoE</label><input class="inp" id="wanPass" type="password"></div>
+        <div class="card">
+          <div class="sec-h"><h2>معايرة العداد (Standard & Scale)</h2></div>
+          <div class="fg"><label>معيار حساب الجيجابايت</label>
+            <select id="qStd">
+              <option value="1024">1024 MiB = 1 GiB (قياسي)</option>
+              <option value="1000">1000 MB = 1 GB (شركات الاتصالات)</option>
+            </select>
+          </div>
+          <div class="fg"><label>نسبة المعايرة (%): <b id="qPctLbl">100%</b> (لمطابقة فاتورة الشركة 50% - 200%)</label>
+            <input id="qPct" type="range" min="50" max="200" value="100" style="width:100%" oninput="document.getElementById('qPctLbl').textContent=this.value+'%'">
+          </div>
+          <div class="fg"><label>وضع المعايرة</label>
+            <select id="qMode">
+              <option value="0">تطبيق نسبة المعايرة (%)</option>
+              <option value="1">بدون تعديل (القراءة الخام 100%)</option>
+            </select>
+          </div>
+          <button class="btn pri" onclick="saveMeterScale()">حفظ المعايرة</button>
         </div>
-        <div class="fg"><label>DNS مخصص (اختياري، مثل 1.1.1.1 8.8.8.8)</label><input class="inp" id="wanDns"></div>
-        <button class="btn pri" style="width:100%;margin-top:8px" onclick="saveNetInfo()">حفظ وتطبيق إعدادات الشبكة</button>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- TAB 4: TELEGRAM BOT -->
-  <section id="tab-tg" class="panel">
-    <div class="grid g2">
-      <div class="card">
-        <div class="sec-h"><h2>إعدادات بوت تليجرام</h2></div>
-        <label class="chk"><input type="checkbox" id="tgEn"> تفعيل بوت تليجرام</label>
-        <label class="chk"><input type="checkbox" id="tgInter"> تفعيل الأوامر التفاعلية (Slash & أزرار)</label>
-        <div class="fg"><label>Bot Token (من @BotFather)</label><input class="inp" id="tgTok" placeholder="123456:ABC-DEF..."></div>
-        <div class="fg"><label>معرفات المشرفين Chat IDs (مفصولة بفاصلة)</label><input class="inp" id="tgIds" placeholder="123456789,987654321"></div>
-        <div class="fg"><label>نسب التنبيه المئوية (%)</label><input class="inp" id="tgThr" placeholder="50,75,90,95,100"></div>
-        <div class="acts">
-          <button class="btn pri" onclick="saveTg(false)">حفظ الإعدادات</button>
-          <button class="btn ok" onclick="saveTg(true)">حفظ وإرسال رسالة اختبار</button>
+    <!-- TAB 3: NATIVE WIFI & WAN -->
+    <section id="tab-net" class="panel">
+      <div class="grid g2">
+        <div class="card">
+          <div class="sec-h"><h2>إعدادات الوايفاي الأصلية (ath9k)</h2><button class="btn sm" onclick="loadNetInfo()">تحديث</button></div>
+          <div class="fg"><label>اسم الشبكة (SSID)</label><input class="inp" id="wSsid"></div>
+          <div class="fg"><label>كلمة مرور الوايفاي (8 أحرف فأكثر)</label><input class="inp" id="wKey" type="password"></div>
+          <div class="grid g2">
+            <div class="fg"><label>التشفير</label>
+              <select id="wEnc"><option value="psk2">WPA2-PSK (مستحسن)</option><option value="psk-mixed">WPA/WPA2 المختلط</option><option value="none">مفتوح</option></select>
+            </div>
+            <div class="fg"><label>القناة</label>
+              <select id="wChan"><option value="auto">تلقائي (Auto)</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option></select>
+            </div>
+          </div>
+          <div class="grid g2">
+            <div class="fg"><label>عرض النطاق</label><select id="wHt"><option value="HT40">40 MHz (أقصى سرعة 150Mbps)</option><option value="HT20">20 MHz (استقرار أعلى)</option></select></div>
+            <div class="fg"><label>قوة البث (dBm)</label><input class="inp" id="wTxp" placeholder="تلقائي (18 لأقصى قوة)"></div>
+          </div>
+          <div class="fg"><label>نطاق القنوات والطاقة (Country)</label>
+            <select id="wCountry">
+              <option value="JP">JP — أقصى طاقة 18 dBm + قنوات 12 و13 (مستحسن)</option>
+              <option value="TW">TW — طاقة 16 dBm + قنوات 12 و13</option>
+              <option value="US">US — طاقة 16 dBm (قنوات 1–11 فقط)</option>
+              <option value="EG">EG — مصر/أوروبا 13 dBm + قنوات 12 و13</option>
+            </select>
+          </div>
+          <label class="chk"><input type="checkbox" id="wDis"> تعطيل الوايفاي مؤقتاً</label>
+        </div>
+        <div class="card">
+          <div class="sec-h"><h2>إعدادات منفذ الإنترنت (WAN)</h2></div>
+          <div class="fg"><label>نوع الاتصال</label>
+            <select id="wanProto" onchange="toggleWanFields()">
+              <option value="dhcp">DHCP تلقائي (خلف راوتر/مودم)</option>
+              <option value="static">IP ثابت (Static)</option>
+              <option value="pppoe">PPPoE (اسم مستخدم وكلمة مرور)</option>
+            </select>
+          </div>
+          <div id="wanStatic" class="hide">
+            <div class="grid g2">
+              <div class="fg"><label>IP Address</label><input class="inp" id="wanIp"></div>
+              <div class="fg"><label>Netmask</label><input class="inp" id="wanMask" placeholder="255.255.255.0"></div>
+            </div>
+            <div class="fg"><label>Gateway</label><input class="inp" id="wanGw"></div>
+          </div>
+          <div id="wanPppoe" class="hide">
+            <div class="fg"><label>اسم مستخدم PPPoE</label><input class="inp" id="wanUser"></div>
+            <div class="fg"><label>كلمة مرور PPPoE</label><input class="inp" id="wanPass" type="password"></div>
+          </div>
+          <div class="fg"><label>DNS مخصص (اختياري، مثل 1.1.1.1 8.8.8.8)</label><input class="inp" id="wanDns"></div>
+          <button class="btn pri" style="width:100%;margin-top:8px" onclick="saveNetInfo()">حفظ وتطبيق إعدادات الوايفاي والـ WAN</button>
+        </div>
+        <div class="card">
+          <div class="sec-h"><h2>الشبكة المحلية وDHCP (LAN)</h2><span class="sec-badge num" id="dhcpRangePreview">-</span></div>
+          <div class="grid g2">
+            <div class="fg"><label>IP الدخول لصفحة الراوتر</label><input class="inp num" id="lanIp" placeholder="192.168.1.1" oninput="updateDhcpPreview()"></div>
+            <div class="fg"><label>قناع الشبكة (Netmask)</label><input class="inp num" id="lanMask" placeholder="255.255.255.0"></div>
+          </div>
+          <label class="chk"><input type="checkbox" id="dhcpEn" checked onchange="$('dhcpFields').classList.toggle('hide',!this.checked)"> تفعيل خادم DHCP لتوزيع العناوين على الأجهزة تلقائياً</label>
+          <div id="dhcpFields">
+            <div class="grid g2">
+              <div class="fg"><label>بداية النطاق (Start)</label><input class="inp num" id="dhcpStart" type="number" min="2" max="254" value="100" oninput="updateDhcpPreview()"></div>
+              <div class="fg"><label>عدد الأجهزة (Limit)</label><input class="inp num" id="dhcpLimit" type="number" min="1" max="250" value="150" oninput="updateDhcpPreview()"></div>
+            </div>
+            <div class="grid g2">
+              <div class="fg"><label>مدة الإيجار (Lease Time)</label>
+                <select id="dhcpLease">
+                  <option value="1h">ساعة واحدة (1h)</option>
+                  <option value="6h">6 ساعات (6h)</option>
+                  <option value="12h" selected>12 ساعة (12h)</option>
+                  <option value="24h">24 ساعة (24h)</option>
+                  <option value="7d">أسبوع (7d)</option>
+                </select>
+              </div>
+              <div class="fg"><label>DNS للأجهزة (اختياري)</label><input class="inp num" id="dhcpDns" placeholder="1.1.1.1 8.8.8.8"></div>
+            </div>
+          </div>
+          <button class="btn pri" style="width:100%;margin-top:8px" onclick="saveLanDhcp()">حفظ وتطبيق إعدادات LAN وDHCP</button>
         </div>
       </div>
-      <div class="card">
-        <div class="sec-h"><h2>المستخدمون المكتشفون والأوامر المتاحة</h2></div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:8px">أي شخص يرسل <code>/start</code> أو <code>/id</code> للبوت سيظهر هنا لربطه بجهازه أو إضافته كمشرف:</p>
-        <div id="tgUsersList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px"></div>
-        <div style="font-size:12px;color:var(--muted);background:var(--card);padding:10px;border-radius:10px;line-height:1.8">
-          <b>أوامر المشرفين:</b> <code>/status</code> الحالة، <code>/speed</code> السرعة المباشرة، <code>/quota</code> الباقة، <code>/devices</code> الأجهزة، <code>/block IP|MAC</code> حظر، <code>/unblock IP|MAC</code> فك، <code>/add IP|MAC 5</code> إضافة 5 جيجا، <code>/vip IP|MAC</code> ألعاب، <code>/reboot</code> إعادة تشغيل.<br>
-          <b>أوامر المستخدم العادي (المربوط بجهاز):</b> <code>/quota</code> و <code>/speed</code> و <code>/id</code>.
-        </div>
-      </div>
-    </div>
-    <div class="card" style="margin-top:12px">
-      <div class="sec-h">
-        <h2>🔔 تخصيص رسائل الإشعارات حسب النسبة المئوية</h2>
-        <div class="acts">
-          <button class="btn sm warn" type="button" onclick="resetTgAlerts()">مسح القوالب (الافتراضي)</button>
-          <button class="btn sm pri" type="button" onclick="saveTgAlerts()">💾 حفظ قوالب الإشعارات</button>
-        </div>
-      </div>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:8px">يمكنك تعديل رسالة كل نسبة مئوية تصل للمستخدمين والمشرفين. اضغط على أي متغير لإدراجه، أو اترك أي خانة فارغة لاستخدام النص الافتراضي:</p>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
-        <button type="button" class="var-chip" onclick="insAlertVar('{name}')">{name} اسم الجهاز</button>
-        <button type="button" class="var-chip" onclick="insAlertVar('{ip}')">{ip} الآيبي</button>
-        <button type="button" class="var-chip" onclick="insAlertVar('{pct}')">{pct} النسبة</button>
-        <button type="button" class="var-chip" onclick="insAlertVar('{used}')">{used} المستهلك</button>
-        <button type="button" class="var-chip" onclick="insAlertVar('{quota}')">{quota} الباقة</button>
-        <button type="button" class="var-chip" onclick="insAlertVar('{rem}')">{rem} المتبقي</button>
-      </div>
-      <div id="tgAlertEditors" class="grid g2"></div>
-    </div>
-  </section>
+    </section>
 
-  <!-- TAB 5: MONITORING, AUTO-REBOOT, OTA & PASSWORD -->
-  <section id="tab-sys" class="panel">
-    <div class="grid g2">
-      <div class="card">
-        <div class="sec-h"><h2>المراقبة وإعادة التشغيل التلقائي</h2><span class="pill" id="sysClock" style="font-size:11.5px">الوقت: -</span></div>
-        <label class="chk"><input type="checkbox" id="obsMode"> تفعيل وضع المراقبة (السماح بعرض الحالة بدون تسجيل دخول)</label>
-        <label class="chk"><input type="checkbox" id="rbEn"> تفعيل إعادة التشغيل اليومي التلقائي</label>
-        <div class="grid g4" style="grid-template-columns:1fr 1fr 1fr">
-          <div class="fg"><label>الساعة (0-23)</label><input class="inp" id="rbHr" type="number" min="0" max="23"></div>
-          <div class="fg"><label>الدقيقة (0-59)</label><input class="inp" id="rbMn" type="number" min="0" max="59"></div>
-          <div class="fg"><label>المنطقة (UTC)</label>
-            <div style="display:flex;gap:4px"><input class="inp" id="rbTz" type="number" min="-12" max="14"><button class="btn sm" type="button" title="كشف المنطقة من المتصفح" onclick="autoTz()">📍</button></div>
+    <!-- TAB: FAZAKKIR (PRAYER TIMES & AZKAR) -->
+    <section id="tab-fazakkir" class="panel">
+      <div class="grid g2" style="margin-bottom:12px">
+        <div class="card">
+          <div class="sec-h">
+            <h2>🕌 مواقيت الصلاة والتذكير</h2>
+            <span class="sec-badge num" id="fzDate">-</span>
+          </div>
+          <label class="chk"><input type="checkbox" id="fzPrayEn" checked> تفعيل إشعارات مواقيت الصلاة تلقائياً</label>
+          <div class="grid g2">
+            <div class="fg"><label>المدينة (بالإنجليزية)</label><input class="inp" id="fzCity" placeholder="Cairo"></div>
+            <div class="fg"><label>الدولة (بالإنجليزية)</label><input class="inp" id="fzCountry" placeholder="Egypt"></div>
+          </div>
+          <div class="fg"><label>طريقة الحساب الفقهية</label>
+            <select id="fzMethod">
+              <option value="5">الهيئة المصرية العامة للمساحة (Egypt)</option>
+              <option value="4">أم القرى — مكة المكرمة</option>
+              <option value="3">رابطة العالم الإسلامي (MWL)</option>
+              <option value="2">الجمعية الإسلامية لأمريكا الشمالية (ISNA)</option>
+              <option value="1">جامعة العلوم الإسلامية — كراتشي</option>
+              <option value="8">دول الخليج</option>
+            </select>
+          </div>
+          <div class="acts" style="margin-bottom:10px">
+            <button class="btn sm ok" type="button" onclick="autolocatePrayers()">📍 تحديد تلقائي من الإنترنت</button>
+            <button class="btn sm pri" type="button" onclick="refreshPrayers()">🔄 تحديث المواقيت الآن</button>
+            <button class="btn sm" type="button" onclick="testFazakkir(1)">🔔 إرسال تذكير تجريبي</button>
+          </div>
+          <div id="fzPrayerGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin-bottom:10px"></div>
+          <div class="grid g2">
+            <div class="fg"><label>مستقبلو تذكير الصلاة</label>
+              <select id="fzPrayRec">
+                <option value="0">المتصلين الآن فقط (+ الآدمن)</option>
+                <option value="1">جميع المسجلين (+ الآدمن)</option>
+              </select>
+            </div>
+            <div class="fg"><label>تكرار التذكير بعد (دقيقة، 0 = بدون تكرار)</label><input class="inp num" id="fzPrayRep" type="number" min="0" max="60" value="10"></div>
           </div>
         </div>
-        <div class="acts" style="margin-bottom:10px">
-          <button class="btn pri" onclick="saveAutoReboot()">حفظ الجدول</button>
-          <button class="btn sm ok" type="button" onclick="syncNtp()">🕒 مزامنة الوقت NTP</button>
-          <button class="btn sm warn" type="button" onclick="saveSysOpts()">💾 حفظ وضع المراقبة</button>
-          <button class="btn err" onclick="rebootNow()">إعادة تشغيل فورية (3ث)</button>
+
+        <div class="card">
+          <div class="sec-h"><h2>⛔ التحكم في الإنترنت أثناء الصلاة</h2></div>
+          <div class="fg"><label>الإجراء عند دخول وقت الصلاة</label>
+            <select id="fzAction" onchange="$('fzKbpsWrap').classList.toggle('hide',this.value!=='2')">
+              <option value="0">إرسال تذكير فقط (بدون تقييد للإنترنت)</option>
+              <option value="2">تحديد سرعة منخفضة مؤقتاً (لاستلام التذكيرات)</option>
+              <option value="1">حظر الإنترنت بالكامل مؤقتاً</option>
+            </select>
+          </div>
+          <div class="grid g2">
+            <div class="fg" id="fzKbpsWrap"><label>السرعة المؤقتة (Kbps)</label><input class="inp num" id="fzKbps" type="number" min="1" max="1000" value="5"></div>
+            <div class="fg"><label>مدة التقييد (بالدقائق)</label><input class="inp num" id="fzDur" type="number" min="1" max="120" value="15"></div>
+          </div>
+          <div class="fg">
+            <label>الأجهزة المشمولة بالتقييد أثناء الصلاة:</label>
+            <div id="fzDevList" style="max-height:210px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px;padding:8px;background:var(--bg-sub);border:1px solid var(--brd);border-radius:var(--r-sm)"></div>
+          </div>
+          <button class="btn pri" style="width:100%" type="button" onclick="saveFazakkir()">💾 حفظ وتطبيق إعدادات فذكر</button>
         </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px">
-          <span style="font-size:12px;color:var(--muted)">أعد التشغيل بعد:</span>
-          <input class="inp" id="rbCdMin" type="number" min="1" max="1440" value="30" style="width:74px">
-          <span style="font-size:12px;color:var(--muted)">دقيقة</span>
-          <button class="btn sm warn" type="button" onclick="rebootCountdownMin()">⏳ بدء المؤقت</button>
-          <button class="btn sm" type="button" onclick="cancelRebootTimer()">❌ إلغاء</button>
-        </div>
-        <hr style="border:none;border-top:1px solid var(--brd);margin:16px 0">
-        <h3 style="font-size:14px;margin-bottom:10px">تغيير بيانات الدخول</h3>
-        <div class="fg"><label>كلمة المرور الحالية</label><input class="inp" id="pOld" type="password"></div>
-        <div class="grid g2">
-          <div class="fg"><label>اسم المستخدم الجديد (اختياري)</label><input class="inp" id="pUser"></div>
-          <div class="fg"><label>كلمة المرور الجديدة (4+ أحرف)</label><input class="inp" id="pNew" type="password"></div>
-        </div>
-        <button class="btn warn" onclick="changePass()">تحديث كلمة المرور</button>
       </div>
 
       <div class="card">
-        <div class="sec-h"><h2>التحديث التلقائي للنظام (OTA / sysupgrade)</h2></div>
-        <div class="fg"><label>رابط ملف الإصدار (version.json)</label>
-          <div style="display:flex;gap:6px">
-            <input class="inp" id="otaVerUrl" placeholder="https://.../version.json">
-            <button class="btn sm" onclick="saveOtaUrl()">حفظ</button>
+        <div class="sec-h">
+          <h2>📿 بطاقات الأذكار والآيات الدورية (تسلسلي بأوقات عشوائية)</h2>
+          <div class="acts">
+            <button class="btn sm ok" type="button" onclick="addZikrCard()">+ إضافة بطاقة</button>
+            <button class="btn sm" type="button" onclick="testFazakkir(0)">📤 إرسال ذكر تجريبي</button>
+            <button class="btn sm pri" type="button" onclick="saveFazakkir()">💾 حفظ الكل</button>
           </div>
         </div>
-        <label class="chk"><input type="checkbox" id="otaAutoChk" onchange="saveSysOpts()"> فحص تلقائي للتحديثات كل 6 ساعات مع إشعار تليجرام</label>
-        <div class="acts" style="margin-bottom:12px">
-          <button class="btn pri" onclick="checkOta()">فحص التحديثات الآن</button>
-        </div>
-        <div id="otaRes" style="font-size:12.5px;color:var(--muted);margin-bottom:12px"></div>
-        <div class="fg"><label>تحديث عبر رابط مباشر (.bin)</label>
-          <div style="display:flex;gap:6px">
-            <input class="inp" id="otaBinUrl" placeholder="https://.../sysupgrade.bin">
-            <button class="btn ok sm" onclick="flashOtaUrl()">ترقية</button>
+        <div class="grid g3" style="margin-bottom:10px">
+          <div>
+            <label class="chk"><input type="checkbox" id="fzAzEn"> تفعيل إرسال الأذكار الدورية</label>
+            <label class="chk"><input type="checkbox" id="fzAzAuto"> جلب ذكر/آية جديدة تلقائياً مع كل إرسال</label>
+          </div>
+          <div class="fg"><label>متوسط المدة بين الإشعارات (دقيقة — تتغير عشوائياً ±30%)</label><input class="inp num" id="fzAzInt" type="number" min="5" max="1440" value="60"></div>
+          <div class="fg"><label>مستقبلو الأذكار</label>
+            <select id="fzAzRec">
+              <option value="0">المتصلين الآن فقط (+ الآدمن)</option>
+              <option value="1">جميع المسجلين (+ الآدمن)</option>
+            </select>
           </div>
         </div>
-        <hr style="border:none;border-top:1px solid var(--brd);margin:14px 0">
-        <div class="fg"><label>أو رفع ملف فيرموير محلي (.bin)</label>
-          <input class="inp" id="otaFile" type="file" accept=".bin">
+        <div class="grid g2" style="margin-bottom:12px;align-items:end">
+          <div class="fg" style="margin-bottom:0"><label>مصدر الجلب التلقائي من الإنترنت</label>
+            <select id="fzAzSrc" onchange="onAzSrcChange()">
+              <option value="quran">آية قرآنية عشوائية (AlQuran Cloud API)</option>
+              <option value="custom">رابط مخصص (JSON أو نص)</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:6px;align-items:end">
+            <div class="fg" style="flex:1;margin-bottom:0"><label>رابط المصدر (URL)</label><input class="inp code" id="fzAzUrl" style="text-align:left" placeholder="https://api.alquran.cloud/v1/ayah/random/quran-uthmani"></div>
+            <button class="btn sm ok" type="button" onclick="fetchZikrNow()">🌐 جلب للبطاقات الآن</button>
+          </div>
         </div>
-        <div class="bar hide" id="otaProgBar" style="margin-bottom:8px"><i id="otaProgFill" style="width:0%"></i></div>
-        <button class="btn warn" onclick="uploadOtaFile()">رفع وتثبيت الفيرموير</button>
+        <div id="fzCardsWrap" class="grid g2"></div>
       </div>
-    </div>
-  </section>
+    </section>
+
+    <!-- TAB 4: TELEGRAM BOT -->
+    <section id="tab-tg" class="panel">
+      <div class="grid g2">
+        <div class="card">
+          <div class="sec-h"><h2>إعدادات بوت تليجرام</h2></div>
+          <label class="chk"><input type="checkbox" id="tgEn"> تفعيل بوت تليجرام</label>
+          <label class="chk"><input type="checkbox" id="tgInter"> تفعيل الأوامر التفاعلية (Slash & أزرار)</label>
+          <div class="fg"><label>Bot Token (من @BotFather)</label><input class="inp" id="tgTok" placeholder="123456:ABC-DEF..."></div>
+          <div class="fg"><label>معرفات المشرفين Chat IDs (مفصولة بفاصلة)</label><input class="inp" id="tgIds" placeholder="123456789,987654321"></div>
+          <div class="fg"><label>نسب التنبيه المئوية (%)</label><input class="inp" id="tgThr" placeholder="50,75,90,95,100"></div>
+          <div class="acts">
+            <button class="btn pri" onclick="saveTg(false)">حفظ الإعدادات</button>
+            <button class="btn ok" onclick="saveTg(true)">حفظ وإرسال رسالة اختبار</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="sec-h"><h2>المستخدمون المكتشفون والأوامر المتاحة</h2></div>
+          <p style="font-size:11.5px;color:var(--muted);margin-bottom:8px">أي شخص يرسل <code>/start</code> أو <code>/id</code> للبوت سيظهر هنا لربطه بجهازه أو إضافته كمشرف:</p>
+          <div id="tgUsersList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+          <div style="font-size:11.5px;color:var(--muted);background:var(--bg-sub);padding:10px;border-radius:var(--r-sm);border:1px solid var(--brd);line-height:1.75">
+            <b>أوامر المشرفين:</b> <code>/status</code> الحالة، <code>/speed</code> السرعة المباشرة، <code>/quota</code> الباقة، <code>/devices</code> الأجهزة، <code>/block IP|MAC</code> حظر، <code>/unblock IP|MAC</code> فك، <code>/add IP|MAC 5</code> إضافة 5 جيجا، <code>/vip IP|MAC</code> ألعاب، <code>/reboot</code> إعادة تشغيل.<br>
+            <b>أوامر المستخدم العادي (المربوط بجهاز):</b> <code>/quota</code> و <code>/speed</code> و <code>/id</code>.
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="sec-h">
+          <h2>🔔 تخصيص رسائل الإشعارات حسب النسبة المئوية</h2>
+          <div class="acts">
+            <button class="btn sm warn" type="button" onclick="resetTgAlerts()">مسح القوالب (الافتراضي)</button>
+            <button class="btn sm pri" type="button" onclick="saveTgAlerts()">💾 حفظ قوالب الإشعارات</button>
+          </div>
+        </div>
+        <p style="font-size:11.5px;color:var(--muted);margin-bottom:8px">يمكنك تعديل رسالة كل نسبة مئوية تصل للمستخدمين والمشرفين. اضغط على أي متغير لإدراجه، أو اترك أي خانة فارغة لاستخدام النص الافتراضي:</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+          <button type="button" class="var-chip" onclick="insAlertVar('{name}')">{name} اسم الجهاز</button>
+          <button type="button" class="var-chip" onclick="insAlertVar('{ip}')">{ip} الآيبي</button>
+          <button type="button" class="var-chip" onclick="insAlertVar('{pct}')">{pct} النسبة</button>
+          <button type="button" class="var-chip" onclick="insAlertVar('{used}')">{used} المستهلك</button>
+          <button type="button" class="var-chip" onclick="insAlertVar('{quota}')">{quota} الباقة</button>
+          <button type="button" class="var-chip" onclick="insAlertVar('{rem}')">{rem} المتبقي</button>
+        </div>
+        <div id="tgAlertEditors" class="grid g2"></div>
+      </div>
+    </section>
+
+    <!-- TAB 5: MONITORING, AUTO-REBOOT, OTA & PASSWORD -->
+    <section id="tab-sys" class="panel">
+      <div class="grid g2">
+        <div class="card">
+          <div class="sec-h"><h2>المراقبة وإعادة التشغيل التلقائي</h2><span class="pill" id="sysClock">الوقت: -</span></div>
+          <label class="chk"><input type="checkbox" id="obsMode"> تفعيل وضع المراقبة (السماح بعرض الحالة بدون تسجيل دخول)</label>
+          <label class="chk"><input type="checkbox" id="rbEn"> تفعيل إعادة التشغيل اليومي التلقائي</label>
+          <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
+            <div class="fg"><label>الساعة (0-23)</label><input class="inp" id="rbHr" type="number" min="0" max="23"></div>
+            <div class="fg"><label>الدقيقة (0-59)</label><input class="inp" id="rbMn" type="number" min="0" max="59"></div>
+            <div class="fg"><label>المنطقة (UTC)</label>
+              <div style="display:flex;gap:4px"><input class="inp" id="rbTz" type="number" min="-12" max="14"><button class="btn sm" type="button" title="كشف المنطقة من المتصفح" onclick="autoTz()">📍</button></div>
+            </div>
+          </div>
+          <div class="acts" style="margin-bottom:10px">
+            <button class="btn pri" onclick="saveAutoReboot()">حفظ الجدول</button>
+            <button class="btn sm ok" type="button" onclick="syncNtp()">🕒 مزامنة الوقت NTP</button>
+            <button class="btn sm warn" type="button" onclick="saveSysOpts()">💾 حفظ وضع المراقبة</button>
+            <button class="btn err" onclick="rebootNow()">إعادة تشغيل فورية (3ث)</button>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px">
+            <span style="font-size:11.5px;color:var(--muted)">أعد التشغيل بعد:</span>
+            <input class="inp" id="rbCdMin" type="number" min="1" max="1440" value="30" style="width:72px">
+            <span style="font-size:11.5px;color:var(--muted)">دقيقة</span>
+            <button class="btn sm warn" type="button" onclick="rebootCountdownMin()">⏳ بدء المؤقت</button>
+            <button class="btn sm" type="button" onclick="cancelRebootTimer()">❌ إلغاء</button>
+          </div>
+          <hr style="border:none;border-top:1px solid var(--brd);margin:14px 0">
+          <h3 style="font-size:13px;margin-bottom:9px">تغيير بيانات الدخول</h3>
+          <div class="fg"><label>كلمة المرور الحالية</label><input class="inp" id="pOld" type="password"></div>
+          <div class="grid g2">
+            <div class="fg"><label>اسم المستخدم الجديد (اختياري)</label><input class="inp" id="pUser"></div>
+            <div class="fg"><label>كلمة المرور الجديدة (4+ أحرف)</label><input class="inp" id="pNew" type="password"></div>
+          </div>
+          <button class="btn warn" onclick="changePass()">تحديث كلمة المرور</button>
+        </div>
+
+        <div class="card">
+          <div class="sec-h"><h2>التحديث التلقائي للنظام (OTA / sysupgrade)</h2></div>
+          <div class="fg"><label>رابط ملف الإصدار (version.json)</label>
+            <div style="display:flex;gap:6px">
+              <input class="inp" id="otaVerUrl" placeholder="https://.../version.json">
+              <button class="btn sm" onclick="saveOtaUrl()">حفظ</button>
+            </div>
+          </div>
+          <label class="chk"><input type="checkbox" id="otaAutoChk" onchange="saveSysOpts()"> فحص تلقائي للتحديثات كل 6 ساعات مع إشعار تليجرام</label>
+          <div class="acts" style="margin-bottom:12px">
+            <button class="btn pri" onclick="checkOta()">فحص التحديثات الآن</button>
+          </div>
+          <div id="otaRes" style="font-size:12px;color:var(--muted);margin-bottom:12px"></div>
+          <div class="fg"><label>تحديث عبر رابط مباشر (.bin)</label>
+            <div style="display:flex;gap:6px">
+              <input class="inp" id="otaBinUrl" placeholder="https://.../sysupgrade.bin">
+              <button class="btn ok sm" onclick="flashOtaUrl()">ترقية</button>
+            </div>
+          </div>
+          <hr style="border:none;border-top:1px solid var(--brd);margin:14px 0">
+          <div class="fg"><label>أو رفع ملف فيرموير محلي (.bin)</label>
+            <input class="inp" id="otaFile" type="file" accept=".bin">
+          </div>
+          <div class="bar hide" id="otaProgBar" style="margin-bottom:8px"><i id="otaProgFill" style="width:0%"></i></div>
+          <button class="btn warn" onclick="uploadOtaFile()">رفع وتثبيت الفيرموير</button>
+        </div>
+      </div>
+    </section>
+  </main>
 </div>
 
 <div id="toast" class="toast"></div>
 <div id="loginModal" class="modal-bg" onclick="if(event.target===this)closeLoginModal()">
   <div class="modal" style="max-width:360px">
     <div class="sec-h"><h2>🔒 دخول المشرف</h2><button class="btn sm" onclick="closeLoginModal()">✕</button></div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:10px">هذا الإجراء يتطلب صلاحيات المشرف.</p>
+    <p style="font-size:11.5px;color:var(--muted);margin-bottom:10px">هذا الإجراء يتطلب صلاحيات المشرف.</p>
     <form id="modalLoginForm">
       <div class="fg"><label>اسم المستخدم</label><input class="inp" id="mUser" value="admin" required></div>
       <div class="fg"><label>كلمة المرور</label><input class="inp" id="mPass" type="password" value="admin" required></div>
-      <div id="mLoginErr" style="color:#f87171;font-size:12px;margin-bottom:8px"></div>
+      <div id="mLoginErr" style="color:var(--err);font-size:11.5px;margin-bottom:8px"></div>
       <button class="btn pri" style="width:100%" type="submit">تأكيد الدخول</button>
     </form>
   </div>
 </div>
 
 <script>
-let S = null, TG_USERS = [], tableMode = true, showOffline = localStorage.getItem('rm_show_offline')==='1', peakD = 0, peakU = 0;
+const VALID_THEMES = ['forest','swiss','petrol','olive','ink'];
+let S = null, TG_USERS = [], tableMode = window.innerWidth > 900, userPinnedView = false;
+let showOffline = localStorage.getItem('rm_show_offline')==='1', peakD = 0, peakU = 0;
 let dirtyMap = {}, openPin = {};
 let histD = new Array(60).fill(0), histU = new Array(60).fill(0), formInit = false;
 let isAdmin = false, observerMode = false, alertsInit = false, lastAlertEl = null, pollTimer = null, pollSeq = 0;
 let curZoom = parseInt(localStorage.getItem('rm_zoom'), 10) || 100;
+let curFs = parseFloat(localStorage.getItem('rm_font_sz')) || 12.5;
 
 const $ = id => document.getElementById(id);
 function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._t);t._t=setTimeout(()=>t.style.display='none',3200);}
@@ -642,11 +1009,40 @@ function devIcon(d){
   if(/lap|pc|macbook|desktop|thinkpad|dell|hp|lenovo|asus|لاب/.test(n))return '💻';
   return '🖥️';
 }
-function connSubTxt(d){
-  return d.is_wifi ? 'Wi-Fi • 2.4GHz' : (d.online ? 'سلكي • LAN' : 'غير متصل');
-}
+function connSubTxt(d){ return d.is_wifi ? 'Wi-Fi • 2.4GHz' : (d.online ? 'سلكي • LAN' : 'غير متصل'); }
 function gbUnit(){return (S&&S.gb_standard===1000)?1e9:1073741824;}
 
+/* THEME, MODE, FONT & FONT SIZE PERSISTENCE */
+function applyThemeMode(th, md){
+  if(!VALID_THEMES.includes(th)) th = 'forest';
+  md = (md === 'dark') ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', th);
+  document.documentElement.setAttribute('data-mode', md);
+  localStorage.setItem('rm_theme', th);
+  localStorage.setItem('rm_mode', md);
+  if($('themeSel')) $('themeSel').value = th;
+  if($('modeBtn')) $('modeBtn').textContent = (md === 'dark') ? '🌙 داكن' : '☀️ فاتح';
+  drawCanvasChart('ovChart');
+}
+$('themeSel').onchange = function(){ applyThemeMode(this.value, document.documentElement.getAttribute('data-mode')); };
+function toggleMode(){
+  const cur = document.documentElement.getAttribute('data-mode') === 'dark' ? 'light' : 'dark';
+  applyThemeMode(document.documentElement.getAttribute('data-theme'), cur);
+}
+function setFont(f){
+  const fam = (!f || f === 'system-ui') ? 'system-ui,-apple-system,Tahoma,sans-serif' : `"${f}",system-ui,-apple-system,Tahoma,sans-serif`;
+  document.documentElement.style.setProperty('--font-ui', fam);
+  localStorage.setItem('rm_font', f || 'IBM Plex Sans Arabic');
+  if($('fontSel')) $('fontSel').value = f || 'IBM Plex Sans Arabic';
+}
+$('fontSel').onchange = function(){ setFont(this.value); };
+function setFontSize(sz){
+  curFs = Math.min(16, Math.max(10.5, +(Number(sz)||12.5).toFixed(1)));
+  document.documentElement.style.setProperty('--fs-k', (curFs / 12.5).toFixed(3));
+  localStorage.setItem('rm_font_sz', String(curFs));
+  if($('fsLbl')) $('fsLbl').textContent = curFs;
+}
+function chgFontSize(d){ setFontSize(curFs + d); }
 function setZoom(z){
   curZoom = Math.min(130, Math.max(70, Math.round(z)));
   localStorage.setItem('rm_zoom', String(curZoom));
@@ -654,7 +1050,37 @@ function setZoom(z){
   if($('zoomLbl')) $('zoomLbl').textContent = curZoom + '%';
 }
 function chgZoom(d){ setZoom(curZoom + d); }
-setZoom(curZoom);
+
+(function initPrefs(){
+  let savedTh = localStorage.getItem('rm_theme') || 'forest';
+  let savedMd = localStorage.getItem('rm_mode');
+  if(!savedMd) savedMd = (savedTh === 'light') ? 'light' : 'light';
+  if(!VALID_THEMES.includes(savedTh)) savedTh = 'forest';
+  applyThemeMode(savedTh, savedMd);
+  setFont(localStorage.getItem('rm_font') || 'IBM Plex Sans Arabic');
+  setFontSize(curFs);
+  setZoom(curZoom);
+})();
+
+/* RESPONSIVE AUTO-CARDS ON MOBILE (<= 900PX) */
+function applyViewMode(){
+  $('viewBtn').textContent = tableMode ? 'عرض بطاقات' : 'عرض جدول';
+  ['On','Off'].forEach(k=>{
+    $('devCards'+k).classList.toggle('hide', tableMode);
+    $('devTable'+k).classList.toggle('hide', !tableMode);
+  });
+}
+function syncResponsiveView(){
+  if(userPinnedView) return;
+  const wantTbl = window.innerWidth > 900;
+  if(wantTbl !== tableMode){
+    tableMode = wantTbl;
+    applyViewMode();
+    if(S) renderDevices(true);
+  }
+}
+window.addEventListener('resize', syncResponsiveView);
+applyViewMode();
 
 function goTab(t){
   const btn = document.querySelector('#navTabs .tab[data-t="'+t+'"]');
@@ -662,20 +1088,16 @@ function goTab(t){
 }
 function updateAuthBtn(){
   const b = $('authBtn'); if(!b) return;
-  if(isAdmin){
-    b.textContent = 'خروج'; b.className = 'btn sm err';
-  } else if(observerMode){
-    b.textContent = '👁️ وضع المراقبة (دخول المشرف)'; b.className = 'btn sm warn';
-  } else {
-    b.textContent = 'دخول المشرف'; b.className = 'btn sm pri';
-  }
+  if(isAdmin){ b.textContent = 'خروج'; b.className = 'btn sm err'; }
+  else if(observerMode){ b.textContent = '👁️ المراقبة (دخول)'; b.className = 'btn sm warn'; }
+  else { b.textContent = 'دخول المشرف'; b.className = 'btn sm pri'; }
 }
 function openLoginModal(){
   $('mLoginErr').textContent = '';
-  $('loginModal').classList.add('show');
+  $('loginModal').classList.add('open');
   setTimeout(()=>$('mPass').focus(), 50);
 }
-function closeLoginModal(){ $('loginModal').classList.remove('show'); }
+function closeLoginModal(){ $('loginModal').classList.remove('open'); }
 function handleAuthClick(){ if(isAdmin) doLogout(); else openLoginModal(); }
 function stopPoll(){ if(pollTimer){ clearInterval(pollTimer); pollTimer = null; } }
 function startPoll(){ if(!pollTimer) pollTimer = setInterval(poll, 1000); }
@@ -691,19 +1113,8 @@ async function api(act, body){
   }
   return r.json();
 }
-
 function showLogin(){$('loginView').classList.remove('hide');$('appView').classList.add('hide');}
 function showApp(){$('loginView').classList.add('hide');$('appView').classList.remove('hide');updateAuthBtn();}
-
-$('themeSel').onchange = function(){
-  document.documentElement.setAttribute('data-theme', this.value);
-  localStorage.setItem('rm_theme', this.value);
-};
-(function(){
-  const th = localStorage.getItem('rm_theme')||'';
-  document.documentElement.setAttribute('data-theme', th);
-  $('themeSel').value = th;
-})();
 
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
@@ -711,6 +1122,7 @@ document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
   b.classList.add('active');
   $('tab-'+b.dataset.t).classList.add('active');
   if(b.dataset.t==='net' && isAdmin) loadNetInfo();
+  if(b.dataset.t==='fazakkir' && isAdmin) loadFazakkir();
   if(b.dataset.t==='ov') drawCanvasChart('ovChart');
 });
 
@@ -728,15 +1140,8 @@ async function submitLoginForm(user, pass, errEl, onOk){
     } else errEl.textContent = res.error || 'خطأ في الدخول';
   }catch(ex){ errEl.textContent = 'تعذر الاتصال بالراوتر'; }
 }
-
-$('loginForm').onsubmit = e => {
-  e.preventDefault();
-  submitLoginForm($('lUser').value, $('lPass').value, $('loginErr'), ()=>{ showApp(); });
-};
-$('modalLoginForm').onsubmit = e => {
-  e.preventDefault();
-  submitLoginForm($('mUser').value, $('mPass').value, $('mLoginErr'), ()=>{ closeLoginModal(); showApp(); toast('تم تسجيل دخول المشرف'); });
-};
+$('loginForm').onsubmit = e => { e.preventDefault(); submitLoginForm($('lUser').value, $('lPass').value, $('loginErr'), ()=>{ showApp(); }); };
+$('modalLoginForm').onsubmit = e => { e.preventDefault(); submitLoginForm($('mUser').value, $('mPass').value, $('mLoginErr'), ()=>{ closeLoginModal(); showApp(); toast('تم تسجيل دخول المشرف'); }); };
 
 async function doLogout(){
   try{ await fetch('/cgi-bin/api?action=logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); }catch(e){}
@@ -765,8 +1170,13 @@ async function poll(){
 function render(){
   if(!S||!S.devices)return;
   $('fwVer').textContent='v'+(S.fw_version||'1.0');
-  $('hdrWan').textContent=S.wan_if||'wan';
-  $('hdrUp').textContent=fmtUptime(S.uptime_s||0);
+  $('hdrWan').textContent=S.wan_if||'eth1';
+  const ups = S.uptime_s||0;
+  $('hdrUp').textContent=fmtUptime(ups);
+  if($('upDays')) $('upDays').textContent=Math.floor(ups/86400);
+  if($('upHrs')) $('upHrs').textContent=Math.floor((ups%86400)/3600);
+  if($('upMins')) $('upMins').textContent=Math.floor((ups%3600)/60);
+  if($('sideClock')) $('sideClock').textContent=S.router_time||'-';
 
   if(S.reboot_countdown_s>=0){
     $('rebootBanner').style.display='block';
@@ -782,23 +1192,37 @@ function render(){
   $('sUsed').textContent=fmtBytes(used);
   if(mq>0){
     const pct=Math.min(100,(used*100)/mq);
+    const rem=Math.max(0,mq-used);
     $('sMainQ').textContent='من '+fmtBytes(mq)+' ('+pct.toFixed(1)+'%)';
+    $('sRemQ').textContent=fmtBytes(rem);
     $('mainBar').className='bar '+(pct>=95?'err':pct>=75?'warn':'ok');
     $('mainBar').firstChild.style.width=pct.toFixed(1)+'%';
   } else {
     $('sMainQ').textContent='باقة غير محدودة';
+    $('sRemQ').textContent='غير محدود';
     $('mainBar').className='bar';$('mainBar').firstChild.style.width='0%';
   }
 
   const onlineCnt=S.devices.filter(d=>d.online).length;
   $('sOnline').textContent=onlineCnt;$('sTotalDev').textContent=S.devices.length;
-  $('sRam').textContent=S.ram_free_kb?((S.ram_free_kb/1024).toFixed(1)+' / '+(S.ram_total_kb/1024).toFixed(1)+' MB'):'-';
+  $('sOffline').textContent=Math.max(0,S.devices.length-onlineCnt);
+  const rt=S.ram_total_kb||0, rf=S.ram_free_kb||0, ru=Math.max(0,rt-rf), rPct=rt>0?Math.min(100,(ru*100)/rt):0;
+  const cl=S.cpu_load||0, cPct=Math.min(100,Math.round(cl*100));
+  $('sRam').textContent=rt?((ru/1024).toFixed(1)+' / '+(rt/1024).toFixed(1)+' MB'):'-';
+  $('sRamFree').textContent=rt?((rf/1024).toFixed(1)+' MB'):'-';
+  $('sCpu').textContent=cl.toFixed(2)+' ('+cPct+'%)';
+  $('sRamBar').className='bar '+(rPct>85?'err':rPct>70?'warn':'ok');
+  $('sRamBar').firstChild.style.width=rPct.toFixed(1)+'%';
+  const chN=parseInt(S.wifi_channel,10);
+  const freqTxt=(chN>=1&&chN<=13)?((2407+chN*5)/1000).toFixed(3)+' GHz':'2.4 GHz';
+  $('sWifiSsid').textContent=S.wifi_disabled?'واي فاي معطّل':(S.wifi_ssid||'-');
+  $('sWifiMeta').textContent=S.wifi_disabled?'CH - • -':('CH '+(S.wifi_channel||'auto')+' • '+freqTxt);
+  $('sConnMeta').textContent='WAN: '+(S.wan_if||'-')+' • '+(S.wifi_txpower_dbm?S.wifi_txpower_dbm+' dBm':((S.wifi_clients||0)+' عملاء'));
   if($('sysClock')) $('sysClock').textContent='الوقت: '+(S.router_time||'-')+(S.time_synced?'':' (غير متزامن)');
   if($('ovClock')) $('ovClock').textContent=S.router_time||'-';
 
   histD.push(td);if(histD.length>60)histD.shift();
   histU.push(tu);if(histU.length>60)histU.shift();
-  drawCanvasChart('spdChart');
   updateOverview(td, tu, used, mq, onlineCnt);
 
   if(!formInit){
@@ -826,46 +1250,57 @@ function drawCanvasChart(cid){
   const c=$(cid); if(!c)return;
   const ctx=c.getContext('2d'), w=c.width, h=c.height;
   ctx.clearRect(0,0,w,h);
+  const cs = getComputedStyle(document.documentElement);
+  const colOk = cs.getPropertyValue('--ok').trim() || '#10b981';
+  const colPri = cs.getPropertyValue('--pri').trim() || '#047857';
+  const colBrd = cs.getPropertyValue('--brd').trim() || 'rgba(128,128,128,.2)';
   const mx=Math.max(500000, ...histD, ...histU);
-  ctx.strokeStyle='rgba(255,255,255,0.07)';ctx.lineWidth=1;
+  ctx.strokeStyle=colBrd;ctx.lineWidth=1;
   for(let i=1;i<=3;i++){const y=(h/4)*i;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
-  const plot=(arr,col,fill)=>{
+  const plot=(arr,col,alpha)=>{
     ctx.beginPath();
     arr.forEach((v,i)=>{
-      const x=(i/(arr.length-1))*w, y=h-8-((v/mx)*(h-18));
+      const x=(i/(arr.length-1))*w, y=h-6-((v/mx)*(h-14));
       if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
     });
-    ctx.strokeStyle=col;ctx.lineWidth=2.2;ctx.stroke();
-    ctx.lineTo(w,h);ctx.lineTo(0,h);ctx.closePath();ctx.fillStyle=fill;ctx.fill();
+    ctx.strokeStyle=col;ctx.lineWidth=2;ctx.stroke();
+    ctx.lineTo(w,h);ctx.lineTo(0,h);ctx.closePath();
+    ctx.globalAlpha=alpha;ctx.fillStyle=col;ctx.fill();ctx.globalAlpha=1;
   };
-  plot(histD,'#38bdf8','rgba(56,189,248,0.14)');
-  plot(histU,'#fb7185','rgba(251,113,133,0.12)');
+  plot(histD, colOk, 0.14);
+  plot(histU, colPri, 0.10);
 }
 
 function updateOverview(td, tu, used, mq, onlineCnt){
   if(!$('tab-ov'))return;
   const totDev=S.devices.length||0;
   $('ovWanIf').textContent=(S.wan_if||'WAN').toUpperCase();
-  $('ovWanState').textContent=(td+tu>0)?'حركة بيانات نشطة':'جاهز ومتصل';
+  $('ovWanState').textContent=(td+tu>0)?'• حركة بيانات نشطة':'• متصل وجاهز';
   $('ovLanCnt').textContent=onlineCnt+' متصل / '+totDev;
   $('ovWifiInfo').textContent=S.wifi_disabled?'الوايفاي معطّل':((S.wifi_ssid||'Wi-Fi')+' • '+(S.wifi_clients||0)+' لاسلكي');
 
-  const rt=S.ram_total_kb||1, rf=S.ram_free_kb||0, ramFreePct=Math.min(100,Math.max(0,(rf*100)/rt));
-  $('ovRamTxt').textContent=(rf/1024).toFixed(1)+' / '+(rt/1024).toFixed(1)+' MB ('+ramFreePct.toFixed(0)+'%)';
-  $('ovRamBar').className='bar '+(ramFreePct<15?'err':ramFreePct<30?'warn':'ok');
-  $('ovRamBar').firstChild.style.width=ramFreePct.toFixed(1)+'%';
+  /* Speed & Interactive Gauge */
+  const capD=(S.wan_down_kbps||0)*1000;
+  const maxD=Math.max(1000000, capD, peakD, td);
+  const maxU=Math.max(500000, (S.wan_up_kbps||0)*1000, peakU, tu);
+  $('ovDnVal').textContent=fmtBps(td);
+  $('ovUpVal').textContent=fmtBps(tu);
+  $('ovPeakD').textContent=fmtBps(peakD);
+  $('ovPeakU').textContent=fmtBps(peakU);
+  $('ovCapLbl').textContent=capD>0?('حد الخط '+Math.round(capD/1e6)+'M'):'سحب مباشر';
+  const gPct=Math.min(100,(td*100)/maxD), uPct=Math.min(100,(tu*100)/maxU);
+  $('ovGaugePct').textContent=gPct.toFixed(1)+'%';
+  $('ovGaugeFill').style.width=gPct.toFixed(1)+'%';
+  $('ovGaugeNeedle').style.right=gPct.toFixed(1)+'%';
+  $('ovGaugeUpFill').style.width=uPct.toFixed(1)+'%';
+  const mMax=(maxD/1e6);
+  $('ovGaugeTicks').innerHTML=`<span>0M</span><span>${(mMax*0.25).toFixed(1)}M</span><span>${(mMax*0.5).toFixed(1)}M</span><span>${(mMax*0.75).toFixed(1)}M</span><span>${mMax.toFixed(0)}M</span>`;
 
-  const cliPct=totDev>0?Math.min(100,(onlineCnt*100)/totDev):0;
-  $('ovCliTxt').textContent=onlineCnt+' / '+totDev;
-  $('ovCliBar').firstChild.style.width=cliPct.toFixed(1)+'%';
-  $('ovSsidTxt').textContent=S.wifi_ssid||'-';
-  $('ovChTxt').textContent='CH '+(S.wifi_channel||'auto')+(S.wifi_disabled?' (معطل)':'');
-
+  /* Quota & Safe Daily Budget */
   const qPct=mq>0?Math.min(100,(used*100)/mq):0;
   $('ovQuotaPct').textContent=mq>0?(qPct.toFixed(1)+'%'):'♾️';
-  $('ovQuotaRing').setAttribute('stroke-dashoffset', (314*(1-qPct/100)).toFixed(1));
-  $('ovQuotaRing').setAttribute('stroke', qPct>=95?'#f87171':qPct>=75?'#fbbf24':'var(--acc)');
-
+  $('ovQuotaRing').setAttribute('stroke-dashoffset', (257.6*(1-qPct/100)).toFixed(1));
+  $('ovQuotaRing').setAttribute('stroke', qPct>=95?'var(--err)':qPct>=75?'var(--warn)':'var(--pri)');
   const remB=Math.max(0, mq-used);
   let remDays=S.period_days||30, elDays=1;
   if(S.end_date && /^\d{4}-\d{2}-\d{2}$/.test(S.end_date)){
@@ -874,27 +1309,51 @@ function updateOverview(td, tu, used, mq, onlineCnt){
   if(S.start_date && /^\d{4}-\d{2}-\d{2}$/.test(S.start_date)){
     elDays=Math.max(1, Math.ceil((Date.now()-new Date(S.start_date+'T00:00:00'))/86400000));
   }
-  $('ovQuotaRem').textContent=mq>0?fmtBytes(remB):'غير محدود';
-  $('ovRemDays').textContent=remDays;
   const safeDaily=mq>0?(remB/remDays):0, avgDaily=used/elDays;
-  $('ovSafeRate').textContent=mq>0?(fmtBytes(safeDaily)+'/يوم'):'مفتوح';
+  $('ovCycleBadge').textContent='الدورة: '+(S.period_days||30)+' يوم';
+  $('ovQuotaRem').textContent=mq>0?fmtBytes(remB):'غير محدود';
+  $('ovQuotaSub').textContent=mq>0?('مستخدم '+fmtBytes(used)+' من '+fmtBytes(mq)):('إجمالي المستهلك: '+fmtBytes(used));
+  $('ovSafeRate').textContent=mq>0?(fmtBytes(safeDaily)+' / يوم'):'مفتوح';
+  $('ovAvgRate').textContent=fmtBytes(avgDaily)+' / يوم';
+  $('ovRemDays').textContent=remDays+' يوم (من '+(S.period_days||30)+')';
+  $('ovEndDate').textContent=S.end_date||'-';
 
   const pp=$('ovPredPill');
-  if(mq<=0){pp.className='pred-pill ok';pp.textContent='♾️ باقة مفتوحة بدون حد';}
-  else if(remB<=0){pp.className='pred-pill warn';pp.textContent='⚠️ تم استهلاك كامل الباقة';}
-  else if(avgDaily<=safeDaily*1.05){pp.className='pred-pill ok';pp.textContent='✅ معدل استهلاك آمن ('+fmtBytes(avgDaily)+'/يوم)';}
+  if(mq<=0){pp.className='pred-pill ok';pp.innerHTML='<span>♾️ باقة مفتوحة بدون حد</span><span></span>';}
+  else if(remB<=0){pp.className='pred-pill warn';pp.innerHTML='<span>⚠️ تم استهلاك كامل الباقة</span><span>0 GB</span>';}
+  else if(avgDaily<=safeDaily*1.05){pp.className='pred-pill ok';pp.innerHTML='<span>✅ معدل استهلاك آمن</span><span class="num">كافٍ لنهاية الدورة</span>';}
   else{
     const estD=Math.floor(remB/Math.max(1,avgDaily));
-    pp.className='pred-pill warn';pp.textContent='⚠️ بمعدلك الحالي قد تنفد خلال ~'+estD+' يوم';
+    pp.className='pred-pill warn';pp.innerHTML=`<span>⚠️ استهلاك مرتفع</span><span class="num">ينفد خلال ~${estD} يوم</span>`;
   }
 
-  $('ovPeakTxt').textContent=fmtBps(Math.max(peakD,peakU));
-  const maxD=Math.max(1000000,(S.wan_down_kbps||0)*1000,peakD,td);
-  const maxU=Math.max(500000,(S.wan_up_kbps||0)*1000,peakU,tu);
-  $('ovDnVal').textContent=fmtBps(td);
-  $('ovUpVal').textContent=fmtBps(tu);
-  $('ovDnRing').setAttribute('stroke-dashoffset',(314*(1-Math.min(1,td/maxD))).toFixed(1));
-  $('ovUpRing').setAttribute('stroke-dashoffset',(314*(1-Math.min(1,tu/maxU))).toFixed(1));
+  /* Router Resources & Wi-Fi TX Signal */
+  const rt=S.ram_total_kb||1, rf=S.ram_free_kb||0, ru=Math.max(0,rt-rf);
+  const ramUsedPct=Math.min(100,Math.max(0,(ru*100)/rt));
+  $('ovRamTxt').textContent=(ru/1024).toFixed(1)+' / '+(rt/1024).toFixed(1)+' MB (متاح '+(rf/1024).toFixed(1)+')';
+  $('ovRamBar').className='bar '+(ramUsedPct>85?'err':ramUsedPct>70?'warn':'');
+  $('ovRamBar').firstChild.style.width=ramUsedPct.toFixed(1)+'%';
+
+  const cl=S.cpu_load||0, cpuPct=Math.min(100,Math.round(cl*100));
+  $('ovCpuTxt').textContent=cl.toFixed(2)+' ('+cpuPct+'%)';
+  $('ovCpuBar').className='bar '+(cpuPct>85?'err':cpuPct>65?'warn':'ok');
+  $('ovCpuBar').firstChild.style.width=cpuPct+'%';
+
+  const ft=S.flash_total_kb||0, ff=S.flash_free_kb||0, fu=Math.max(0,ft-ff);
+  const flPct=ft>0?Math.min(100,(fu*100)/ft):0;
+  $('ovFlashTxt').textContent=ft>0?('متاح '+ff+' / '+ft+' KB'):'-';
+  $('ovFlashBar').firstChild.style.width=flPct.toFixed(1)+'%';
+
+  const cliPct=totDev>0?Math.min(100,(onlineCnt*100)/totDev):0;
+  $('ovCliTxt').textContent=onlineCnt+' متصل / '+totDev+' مسجل';
+  $('ovCliBar').firstChild.style.width=cliPct.toFixed(1)+'%';
+
+  $('ovSsidTxt').textContent=S.wifi_ssid||'-';
+  $('ovChTxt').textContent='CH '+(S.wifi_channel||'auto')+(S.wifi_disabled?' (معطل)':'');
+  $('ovTxpVal').textContent=S.wifi_disabled?'معطّل':((S.wifi_txpower_dbm||18)+' dBm');
+  $('ovSigVal').textContent=S.wifi_signal_dbm?('إشارة: '+S.wifi_signal_dbm+' dBm'):((S.wifi_clients||0)+' عملاء');
+  $('ovSigBars').classList.toggle('off', !!S.wifi_disabled);
+
   if($('tab-ov').classList.contains('active')) drawCanvasChart('ovChart');
 }
 
@@ -908,12 +1367,9 @@ function toggleOffline(){
   applyOfflineVis();
 }
 function toggleView(){
+  userPinnedView = true;
   tableMode=!tableMode;
-  $('viewBtn').textContent=tableMode?'عرض بطاقات':'عرض جدول';
-  ['On','Off'].forEach(k=>{
-    $('devCards'+k).classList.toggle('hide',tableMode);
-    $('devTable'+k).classList.toggle('hide',!tableMode);
-  });
+  applyViewMode();
   renderDevices(true);
 }
 applyOfflineVis();
@@ -936,9 +1392,7 @@ function onDevInp(mac,fld,el){
   dirtyMap[mac][fld]=el.value;
   el.classList.add('dirty');
   const box=el.closest('[data-mac]');
-  if(box){
-    const sb=box.querySelector('.save-btn');if(sb)sb.classList.add('dirty-save');
-  }
+  if(box){ const sb=box.querySelector('.save-btn');if(sb)sb.classList.add('dirty-save'); }
 }
 function onDevKey(e,mac){if(e.key==='Enter'){e.preventDefault();saveRow(mac);}}
 function togPin(mac){openPin[mac]=!openPin[mac];renderDevices(true);}
@@ -951,20 +1405,15 @@ function devSpdHtml(d){
   const unl=!!d.speed_unlocked;
   const rd=(!unl&&d.cap_down_kbps>0)?d.cap_down_kbps*1000:50e6, ru=(!unl&&d.cap_up_kbps>0)?d.cap_up_kbps*1000:20e6;
   const pd=Math.min(100,((d.cur_down_bps||0)*100)/rd), pu=Math.min(100,((d.cur_up_bps||0)*100)/ru);
-  return {
-    txtD:fmtBps(d.cur_down_bps), txtU:fmtBps(d.cur_up_bps),
-    wD:pd.toFixed(1)+'%', wU:pu.toFixed(1)+'%'
-  };
+  return { txtD:fmtBps(d.cur_down_bps), txtU:fmtBps(d.cur_up_bps), wD:pd.toFixed(1)+'%', wU:pu.toFixed(1)+'%' };
 }
 function devQuotaStats(d){
   const dn=d.down_bytes||0, up=d.up_bytes||0, u=dn+up, qb=d.quota_bytes||0, pct=qb>0?Math.min(100,(u*100)/qb):0;
   return {
-    usedTxt:fmtBytes(u),
-    pctTxt:qb>0?(pct.toFixed(0)+'%'):'∞',
-    splitTxt:`↑ ${fmtBytes(up)} | ↓ ${fmtBytes(dn)}`,
-    cls:qb>0?(pct>=99?'err':pct>=75?'warn':'ok'):'',
-    w:qb>0?(pct.toFixed(1)+'%'):'0%',
-    showBar:qb>0
+    usedTxt:fmtBytes(u), showBar:qb>0, w:pct.toFixed(1)+'%',
+    cls:pct>=95?'err':pct>=75?'warn':'ok',
+    pctTxt:qb>0?(pct.toFixed(1)+'%'):'♾️ مفتوح',
+    splitTxt:`↓${fmtBytes(dn)} • ↑${fmtBytes(up)}`
   };
 }
 function devCapLabel(d){if(d.speed_unlocked)return '🚀 سرعة مفتوحة (تجاوز التحديد)';return (d.cap_down_kbps>0||d.cap_up_kbps>0)?'محدد Mbps':'مفتوح Mbps';}
@@ -982,20 +1431,16 @@ function patchDevNode(node,d){
   node.classList.toggle('blocked',!!d.blocked);
   node.classList.toggle('vip',!!d.gaming_mode);
   const q=(r)=>node.querySelector(`[data-role="${r}"]`);
-  if(q('badges'))q('badges').innerHTML=devBadgesHtml(d);
-  if(q('conn-sub'))q('conn-sub').textContent=connSubTxt(d);
-  if(q('dur')){
-    q('dur').textContent=d.online?('⏱ '+fmtDur(d.connected_s)):'-';
-    q('dur').className='dur-pill'+(d.online?'':' off');
-  }
-  if(q('ip-txt'))q('ip-txt').textContent=d.ip||d.bound_ip||'-';
-  if(q('spd-d'))q('spd-d').textContent=sp.txtD;
-  if(q('spd-u'))q('spd-u').textContent=sp.txtU;
-  if(q('spd-bar-d'))q('spd-bar-d').style.width=sp.wD;
-  if(q('spd-bar-u'))q('spd-bar-u').style.width=sp.wU;
-  if(q('q-used'))q('q-used').textContent='المستهلك: '+qs.usedTxt;
-  if(q('q-pct'))q('q-pct').textContent=qs.pctTxt;
-  if(q('q-split'))q('q-split').textContent=qs.splitTxt;
+  const setT=(r,t)=>{const e=q(r);if(e&&e.textContent!==t)e.textContent=t;};
+  const bdg=q('badges');if(bdg){const bh=devBadgesHtml(d);if(bdg.innerHTML!==bh)bdg.innerHTML=bh;}
+  setT('conn-sub',connSubTxt(d));
+  if(q('dur')){const dt=d.online?('⏱ '+fmtDur(d.connected_s)):'-', dc='dur-pill'+(d.online?'':' off');if(q('dur').textContent!==dt)q('dur').textContent=dt;if(q('dur').className!==dc)q('dur').className=dc;}
+  setT('ip-txt',d.ip||d.bound_ip||'-');
+  setT('spd-d',sp.txtD);
+  setT('spd-u',sp.txtU);
+  setT('q-used','المستهلك: '+qs.usedTxt);
+  setT('q-pct',qs.pctTxt);
+  setT('q-split',qs.splitTxt);
   const qb=q('q-bar');
   if(qb){qb.className='bar '+qs.cls+(qs.showBar?'':' hide');qb.firstChild.style.width=qs.w;}
   if(q('cap-lbl')){q('cap-lbl').textContent=devCapLabel(d);q('cap-lbl').classList.toggle('unlocked',!!d.speed_unlocked);}
@@ -1004,30 +1449,15 @@ function patchDevNode(node,d){
   const df=dirtyMap[d.mac]||{};
   Object.keys(flds).forEach(k=>{
     const inp=node.querySelector(`[data-f="${k}"]`);
-    if(!inp)return;
-    if(df[k]===undefined&&document.activeElement!==inp){inp.value=flds[k];inp.classList.remove('dirty');}
+    if(inp && df[k]===undefined && document.activeElement!==inp){inp.value=flds[k];inp.classList.remove('dirty');}
   });
   const sb=node.querySelector('.save-btn');if(sb)sb.classList.toggle('dirty-save',v.dirty);
   const bb=node.querySelector('[data-act="blk"]');
-  if(bb){
-    bb.className='btn sm '+(d.blocked?'ok':'err');
-    bb.textContent=d.blocked?'✅':'⛔';
-    bb.title=d.blocked?'فك الحظر':'حظر الجهاز';
-    bb.setAttribute('onclick',`togBlk('${d.mac}',${!d.blocked})`);
-  }
+  if(bb){bb.className='btn sm '+(d.blocked?'ok':'err');bb.textContent=d.blocked?'✅':'⛔';bb.title=d.blocked?'فك الحظر':'حظر الجهاز';bb.setAttribute('onclick',`togBlk('${d.mac}',${!d.blocked})`);}
   const vb=node.querySelector('[data-act="vip"]');
-  if(vb){
-    vb.className='btn sm '+(d.gaming_mode?'active-vip':'vip');
-    vb.title=d.gaming_mode?'إلغاء وضع VIP':'تفعيل أولوية VIP للألعاب';
-    vb.setAttribute('onclick',`togVip('${d.mac}',${!d.gaming_mode})`);
-  }
+  if(vb){vb.className='btn sm '+(d.gaming_mode?'active-vip':'vip');vb.title=d.gaming_mode?'إلغاء وضع VIP':'تفعيل أولوية VIP للألعاب';vb.setAttribute('onclick',`togVip('${d.mac}',${!d.gaming_mode})`);}
   const ub=node.querySelector('[data-act="unlim"]');
-  if(ub){
-    ub.className='btn sm '+(d.speed_unlocked?'active-unlim':'ok');
-    ub.textContent=d.speed_unlocked?'🔓':'🚀';
-    ub.title=d.speed_unlocked?'إعادة تطبيق تحديد السرعة':'فتح السرعة الكاملة بدون تغيير القيم';
-    ub.setAttribute('onclick',`togUnlim('${d.mac}',${!d.speed_unlocked})`);
-  }
+  if(ub){ub.className='btn sm '+(d.speed_unlocked?'active-unlim':'ok');ub.textContent=d.speed_unlocked?'🔓':'🚀';ub.title=d.speed_unlocked?'إعادة تطبيق تحديد السرعة':'فتح السرعة الكاملة بدون تغيير القيم';ub.setAttribute('onclick',`togUnlim('${d.mac}',${!d.speed_unlocked})`);}
 }
 
 function renderListInto(wrap,list,emptyMsg,isTbl,force){
@@ -1047,60 +1477,33 @@ function renderListInto(wrap,list,emptyMsg,isTbl,force){
       const cls=(f,base)=>base+(df[f]!==undefined?' dirty':'');
       return `<tr data-mac="${d.mac}" class="${d.blocked?'blocked':''} ${d.gaming_mode?'vip':''}">
         <td><div class="badges" data-role="badges">${devBadgesHtml(d)}</div></td>
-        <td style="min-width:155px">
-          <div style="display:flex;align-items:center;gap:6px">
-            <span style="font-size:16px">${devIcon(d)}</span>
-            <input class="${cls('name','tinp')}" data-f="name" value="${esc(v.name)}" placeholder="${esc(d.mac)}" style="width:118px;font-weight:700" oninput="onDevInp('${d.mac}','name',this)" onkeydown="onDevKey(event,'${d.mac}')">
+        <td style="min-width:165px">
+          <div style="display:flex;align-items:center;justify-content:center;gap:5px">
+            <span>${devIcon(d)}</span>
+            <input class="${cls('name','tinp')}" data-f="name" value="${esc(v.name)}" placeholder="${esc(d.mac)}" style="width:142px;max-width:100%;font-weight:600;text-align:center;text-overflow:ellipsis" oninput="onDevInp('${d.mac}','name',this)" onkeydown="onDevKey(event,'${d.mac}')">
           </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;padding-right:22px" data-role="conn-sub">${connSubTxt(d)}</div>
+          <div style="font-size:calc(10px * var(--fs-k,1));color:var(--muted);margin-top:2px" data-role="conn-sub">${connSubTxt(d)}</div>
         </td>
         <td><span class="dur-pill ${d.online?'':'off'}" data-role="dur">${d.online?('⏱ '+fmtDur(d.connected_s)):'-'}</span></td>
-        <td style="min-width:130px">
-          <div class="ip-main">
-            <span data-role="ip-txt">${esc(d.ip||d.bound_ip||'-')}</span>
-            <button class="pin-btn ${pin||d.bound_ip?'pinned':''}" title="تثبيت IP ثابت" onclick="togPin('${d.mac}')">📌</button>
-          </div>
+        <td style="min-width:125px">
+          <div class="ip-main"><span data-role="ip-txt">${esc(d.ip||d.bound_ip||'-')}</span><button class="pin-btn ${pin||d.bound_ip?'pinned':''}" title="تثبيت IP ثابت" onclick="togPin('${d.mac}')">📌</button></div>
           <div class="mac-sub">${esc(d.mac)}</div>
-          ${pin?`<input class="${cls('ip','tinp')}" data-f="ip" value="${esc(v.ip)}" placeholder="IP ثابت (مثلاً 192.168.1.50)" style="width:128px;margin-top:4px;font-family:monospace;font-size:11px" oninput="onDevInp('${d.mac}','ip',this)" onkeydown="onDevKey(event,'${d.mac}')">`:''}
+          ${pin?`<input class="${cls('ip','tinp')}" data-f="ip" value="${esc(v.ip)}" placeholder="IP ثابت" style="width:120px;margin-top:4px;font-family:var(--font-mono);font-size:11px" oninput="onDevInp('${d.mac}','ip',this)" onkeydown="onDevKey(event,'${d.mac}')">`:''}
         </td>
-        <td>
-          <div class="spd-pills">
-            <div class="spd-p dn"><span>↓ تنزيل</span><b data-role="spd-d">${sp.txtD}</b></div>
-            <div class="spd-p up"><span>↑ رفع</span><b data-role="spd-u">${sp.txtU}</b></div>
-          </div>
-        </td>
+        <td class="spd-cell"><div class="spd-pills"><div class="spd-p dn"><span>↓ تنزيل</span><b class="num" data-role="spd-d">${sp.txtD}</b></div><div class="spd-p up"><span>↑ رفع</span><b class="num" data-role="spd-u">${sp.txtU}</b></div></div></td>
         <td class="q-cell">
-          <div class="q-top">
-            <span style="color:#fbbf24;font-weight:700" data-role="q-used">المستهلك: ${qs.usedTxt}</span>
-            <input class="${cls('quota','tinp')}" data-f="quota" type="number" step="0.1" min="0" value="${esc(v.quota)}" style="width:54px;text-align:center" title="الكوتة بالجيجابايت (0 = مفتوح)" oninput="onDevInp('${d.mac}','quota',this)" onkeydown="onDevKey(event,'${d.mac}')">
-            <span style="font-size:11px;color:var(--muted)">GB</span>
-          </div>
-          <div class="bar ${qs.cls} ${qs.showBar?'':'hide'}" data-role="q-bar" style="height:6px;margin-top:5px"><i style="width:${qs.w}"></i></div>
-          <div class="q-sub">
-            <span data-role="q-pct" style="font-weight:700;color:#34d399">${qs.pctTxt}</span>
-            <span data-role="q-split">${qs.splitTxt}</span>
-          </div>
-          <div class="q-inline">
-            <button class="btn sm ok" style="padding:2px 7px;font-size:11px" onclick="addGb('${d.mac}',1)">+1G</button>
-            <button class="btn sm ok" style="padding:2px 7px;font-size:11px" onclick="addGb('${d.mac}',5)">+5G</button>
-          </div>
+          <div class="q-top"><span style="color:var(--warn);font-weight:700" data-role="q-used">المستهلك: ${qs.usedTxt}</span><input class="${cls('quota','tinp')}" data-f="quota" type="number" step="0.1" min="0" value="${esc(v.quota)}" style="width:56px;text-align:center" title="الكوتة بالجيجابايت (0 = مفتوح)" oninput="onDevInp('${d.mac}','quota',this)" onkeydown="onDevKey(event,'${d.mac}')"><span style="font-size:10px;color:var(--muted)">GB</span></div>
+          <div class="bar ${qs.cls} ${qs.showBar?'':'hide'}" data-role="q-bar" style="height:5px;margin-top:4px"><i style="width:${qs.w}"></i></div>
+          <div class="q-sub"><span data-role="q-pct" style="font-weight:700;color:var(--ok)">${qs.pctTxt}</span><span data-role="q-split">${qs.splitTxt}</span></div>
         </td>
         <td>
           <div class="cap-pair">
-            <div class="cap-box dn${d.speed_unlocked?' unlocked':''}" title="أقصى تحميل Mbps (0 = مفتوح)">
-              <input class="${df.capD!==undefined?'dirty':''}" data-f="capD" type="number" step="0.5" min="0" value="${esc(v.capD)}" oninput="onDevInp('${d.mac}','capD',this)" onkeydown="onDevKey(event,'${d.mac}')">
-              <span style="color:#34d399;font-size:11px;font-weight:800">↓</span>
-            </div>
-            <div class="cap-box up${d.speed_unlocked?' unlocked':''}" title="أقصى رفع Mbps (0 = مفتوح)">
-              <input class="${df.capU!==undefined?'dirty':''}" data-f="capU" type="number" step="0.5" min="0" value="${esc(v.capU)}" oninput="onDevInp('${d.mac}','capU',this)" onkeydown="onDevKey(event,'${d.mac}')">
-              <span style="color:#f87171;font-size:11px;font-weight:800">↑</span>
-            </div>
+            <div class="cap-box dn${d.speed_unlocked?' unlocked':''}" title="أقصى تحميل Mbps (0 = مفتوح)"><input class="${df.capD!==undefined?'dirty':''}" data-f="capD" type="number" step="0.5" min="0" value="${esc(v.capD)}" oninput="onDevInp('${d.mac}','capD',this)" onkeydown="onDevKey(event,'${d.mac}')"><span style="color:var(--ok);font-size:11px;font-weight:700">↓</span></div>
+            <div class="cap-box up${d.speed_unlocked?' unlocked':''}" title="أقصى رفع Mbps (0 = مفتوح)"><input class="${df.capU!==undefined?'dirty':''}" data-f="capU" type="number" step="0.5" min="0" value="${esc(v.capU)}" oninput="onDevInp('${d.mac}','capU',this)" onkeydown="onDevKey(event,'${d.mac}')"><span style="color:var(--err);font-size:11px;font-weight:700">↑</span></div>
           </div>
           <div class="cap-lbl${d.speed_unlocked?' unlocked':''}" data-role="cap-lbl">${devCapLabel(d)}</div>
         </td>
-        <td>
-          <input class="${cls('tg','tinp')}" data-f="tg" list="tgUsersDL" value="${esc(v.tg)}" placeholder="Chat ID" style="width:98px;font-family:monospace;text-align:center" title="معرف التيليجرام لهذا الجهاز" oninput="onDevInp('${d.mac}','tg',this)" onkeydown="onDevKey(event,'${d.mac}')">
-        </td>
+        <td><input class="${cls('tg','tinp')}" data-f="tg" list="tgUsersDL" value="${esc(v.tg)}" placeholder="Chat ID" style="width:100px;font-family:var(--font-mono);font-size:calc(10.5px * var(--fs-k,1));text-align:center" title="معرف التيليجرام لهذا الجهاز" oninput="onDevInp('${d.mac}','tg',this)" onkeydown="onDevKey(event,'${d.mac}')"></td>
         <td><div class="act-cell">${devRowBtns(d,v.dirty)}</div></td>
       </tr>`;
     }).join('') || `<tr><td colspan="9" style="color:var(--muted);text-align:center">${emptyMsg}</td></tr>`;
@@ -1112,51 +1515,44 @@ function renderListInto(wrap,list,emptyMsg,isTbl,force){
       return `<div class="dev ${d.blocked?'blocked':''} ${d.gaming_mode?'vip':''}" data-mac="${d.mac}">
         <div class="dev-top">
           <div style="flex:1">
-            <div style="display:flex;gap:5px;align-items:center">
-              <span>${devIcon(d)}</span>
-              <input class="${cls('name')}" data-f="name" value="${esc(v.name)}" placeholder="${esc(d.mac)}" style="width:100%" oninput="onDevInp('${d.mac}','name',this)" onkeydown="onDevKey(event,'${d.mac}')">
-            </div>
-            <div class="dev-meta" style="margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span data-role="ip-txt" style="color:#fb7185;font-weight:700">${esc(d.ip||d.bound_ip||'-')}</span>
+            <div style="display:flex;gap:5px;align-items:center"><span>${devIcon(d)}</span><input class="${cls('name')}" data-f="name" value="${esc(v.name)}" placeholder="${esc(d.mac)}" style="width:100%;font-weight:600;font-size:calc(11.5px * var(--fs-k,1))" oninput="onDevInp('${d.mac}','name',this)" onkeydown="onDevKey(event,'${d.mac}')"></div>
+            <div class="dev-meta" style="margin-top:4px;display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+              <span class="code" data-role="ip-txt" style="font-weight:700">${esc(d.ip||d.bound_ip||'-')}</span>
               <button class="pin-btn ${pin||d.bound_ip?'pinned':''}" title="تثبيت IP ثابت" onclick="togPin('${d.mac}')">📌</button>
-              <span>• ${esc(d.mac)}</span>
+              <span class="code">• ${esc(d.mac)}</span>
               <span data-role="conn-sub">${connSubTxt(d)}</span>
             </div>
-            ${pin?`<input class="${cls('ip')}" data-f="ip" value="${esc(v.ip)}" placeholder="IP ثابت (192.168.1.50)" style="width:100%;margin-top:4px;font-family:monospace" oninput="onDevInp('${d.mac}','ip',this)" onkeydown="onDevKey(event,'${d.mac}')">`:''}
+            ${pin?`<input class="${cls('ip')}" data-f="ip" value="${esc(v.ip)}" placeholder="IP ثابت (192.168.1.50)" style="width:100%;margin-top:4px;font-family:var(--font-mono)" oninput="onDevInp('${d.mac}','ip',this)" onkeydown="onDevKey(event,'${d.mac}')">`:''}
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
             <div class="badges" data-role="badges">${devBadgesHtml(d)}</div>
             <span class="dur-pill ${d.online?'':'off'}" data-role="dur">${d.online?('⏱ '+fmtDur(d.connected_s)):'-'}</span>
           </div>
         </div>
-        <div class="spd-pills">
-          <div class="spd-p dn"><span>↓ تنزيل</span><b data-role="spd-d">${sp.txtD}</b></div>
-          <div class="spd-p up"><span>↑ رفع</span><b data-role="spd-u">${sp.txtU}</b></div>
+        <div class="kv-list">
+          <div class="kv"><small>السرعة اللحظية</small><div style="display:flex;flex-direction:column;gap:2px;margin-top:2px"><div class="num" style="color:var(--ok);font-weight:700" data-role="spd-d">↓ ${sp.txtD}</div><div class="num" style="font-size:10.5px;color:var(--muted)" data-role="spd-u">↑ ${sp.txtU}</div></div></div>
+          <div class="kv"><small data-role="q-used">المستهلك: ${qs.usedTxt}</small><div style="display:flex;gap:4px;align-items:center;margin-top:2px"><input class="${cls('quota')}" data-f="quota" type="number" step="0.1" min="0" value="${esc(v.quota)}" style="width:58px" oninput="onDevInp('${d.mac}','quota',this)" onkeydown="onDevKey(event,'${d.mac}')"><span style="font-size:10.5px;color:var(--muted)">GB</span></div></div>
         </div>
         <div>
-          <div class="q-top"><span style="color:#fbbf24;font-weight:700" data-role="q-used">المستهلك: ${qs.usedTxt}</span>
-            <input class="${cls('quota')}" data-f="quota" type="number" step="0.1" min="0" value="${esc(v.quota)}" style="width:62px" oninput="onDevInp('${d.mac}','quota',this)" onkeydown="onDevKey(event,'${d.mac}')">
-            <span style="font-size:11px;color:var(--muted)">GB</span>
-          </div>
           <div class="bar ${qs.cls} ${qs.showBar?'':'hide'}" data-role="q-bar"><i style="width:${qs.w}"></i></div>
-          <div class="q-sub"><span data-role="q-pct">${qs.pctTxt}</span><span data-role="q-split">${qs.splitTxt}</span></div>
-          <div class="q-inline">
-            <button class="btn sm ok" onclick="addGb('${d.mac}',1)">+1G</button>
-            <button class="btn sm ok" onclick="addGb('${d.mac}',5)">+5G</button>
-          </div>
+          <div class="q-sub"><span data-role="q-pct" style="font-weight:700;color:var(--ok)">${qs.pctTxt}</span><span data-role="q-split">${qs.splitTxt}</span></div>
         </div>
-        <div class="cap-pair" style="justify-content:flex-start">
-          <div class="cap-box dn${d.speed_unlocked?' unlocked':''}"><input class="${df.capD!==undefined?'dirty':''}" data-f="capD" type="number" step="0.5" min="0" value="${esc(v.capD)}" oninput="onDevInp('${d.mac}','capD',this)" onkeydown="onDevKey(event,'${d.mac}')"><span style="color:#34d399">↓</span></div>
-          <div class="cap-box up${d.speed_unlocked?' unlocked':''}"><input class="${df.capU!==undefined?'dirty':''}" data-f="capU" type="number" step="0.5" min="0" value="${esc(v.capU)}" oninput="onDevInp('${d.mac}','capU',this)" onkeydown="onDevKey(event,'${d.mac}')"><span style="color:#f87171">↑</span></div>
+        <div class="cap-pair" style="flex-wrap:wrap">
+          <div class="cap-box dn${d.speed_unlocked?' unlocked':''}"><input class="${df.capD!==undefined?'dirty':''}" data-f="capD" type="number" step="0.5" min="0" value="${esc(v.capD)}" oninput="onDevInp('${d.mac}','capD',this)" onkeydown="onDevKey(event,'${d.mac}')"><span style="color:var(--ok)">↓</span></div>
+          <div class="cap-box up${d.speed_unlocked?' unlocked':''}"><input class="${df.capU!==undefined?'dirty':''}" data-f="capU" type="number" step="0.5" min="0" value="${esc(v.capU)}" oninput="onDevInp('${d.mac}','capU',this)" onkeydown="onDevKey(event,'${d.mac}')"><span style="color:var(--err)">↑</span></div>
           <span class="cap-lbl${d.speed_unlocked?' unlocked':''}" data-role="cap-lbl">${devCapLabel(d)}</span>
         </div>
-        <div>
-          <input class="${cls('tg')}" data-f="tg" list="tgUsersDL" value="${esc(v.tg)}" placeholder="Telegram Chat ID" style="width:100%;font-family:monospace" oninput="onDevInp('${d.mac}','tg',this)" onkeydown="onDevKey(event,'${d.mac}')">
-        </div>
-        <div class="acts">${devRowBtns(d,v.dirty)}</div>
+        <div><input class="${cls('tg')}" data-f="tg" list="tgUsersDL" value="${esc(v.tg)}" placeholder="Telegram Chat ID" style="width:100%;font-family:var(--font-mono)" oninput="onDevInp('${d.mac}','tg',this)" onkeydown="onDevKey(event,'${d.mac}')"></div>
+        <div class="acts" style="justify-content:flex-end">${devRowBtns(d,v.dirty)}</div>
       </div>`;
     }).join('') || `<p style="color:var(--muted)">${emptyMsg}</p>`;
   }
+}
+
+function ipNum(ip){
+  const p=(ip||'').split('.');
+  if(p.length!==4)return 0xFFFFFFFF;
+  return (((+p[0]&255)<<24)|((+p[1]&255)<<16)|((+p[2]&255)<<8)|(+p[3]&255))>>>0;
 }
 
 function renderDevices(force){
@@ -1168,14 +1564,12 @@ function renderDevices(force){
     if(flt==='vip'&&!d.gaming_mode)return false;
     if(q && !((d.name||'').toLowerCase().includes(q)||(d.ip||'').includes(q)||(d.mac||'').toLowerCase().includes(q)))return false;
     return true;
-  }).sort((a,b)=>((b.cur_down_bps+b.cur_up_bps)-(a.cur_down_bps+a.cur_up_bps))||(b.last_seen-a.last_seen));
+  }).sort((a,b)=>((b.gaming_mode?1:0)-(a.gaming_mode?1:0))||(ipNum(a.ip||a.bound_ip)-ipNum(b.ip||b.bound_ip))||(a.mac||'').localeCompare(b.mac||''));
 
-  const onList=filt.filter(d=>d.online);
-  const offList=filt.filter(d=>!d.online);
+  const onList=filt.filter(d=>d.online), offList=filt.filter(d=>!d.online);
   $('onBadge').textContent=onList.length+' متصل';
   $('offBadge').textContent=offList.length+' غير متصل';
   $('offlineCard').classList.toggle('hide',flt==='on');
-
   renderListInto(tableMode?$('devTbodyOn'):$('devCardsOn'),onList,'لا توجد أجهزة متصلة حالياً.',tableMode,force);
   renderListInto(tableMode?$('devTbodyOff'):$('devCardsOff'),offList,'لا توجد أجهزة غير متصلة.',tableMode,force);
 }
@@ -1183,10 +1577,7 @@ function renderDevices(force){
 async function saveRow(mac){
   const d=S.devices.find(x=>x.mac===mac);if(!d)return;
   const v=devVals(d);
-  const q=Math.round((parseFloat(v.quota)||0)*gbUnit());
-  const cd=Math.round((parseFloat(v.capD)||0)*1000);
-  const cu=Math.round((parseFloat(v.capU)||0)*1000);
-  await api('device_save',{mac,name:String(v.name).trim(),quota_bytes:q,cap_down_kbps:cd,cap_up_kbps:cu,bound_ip:String(v.ip).trim(),tg_chat_id:String(v.tg).trim()});
+  await api('device_save',{mac,name:String(v.name).trim(),quota_bytes:Math.round((parseFloat(v.quota)||0)*gbUnit()),cap_down_kbps:Math.round((parseFloat(v.capD)||0)*1000),cap_up_kbps:Math.round((parseFloat(v.capU)||0)*1000),bound_ip:String(v.ip).trim(),tg_chat_id:String(v.tg).trim()});
   delete dirtyMap[mac];
   document.querySelectorAll('[data-mac="'+mac+'"] .dirty').forEach(e=>e.classList.remove('dirty'));
   toast('تم حفظ بيانات الجهاز');await poll();
@@ -1197,8 +1588,7 @@ async function addGb(mac,gb){
   if(dirtyMap[mac])delete dirtyMap[mac].quota;
   const qi=document.querySelector(`[data-mac="${mac}"] [data-f="quota"]`);
   if(qi&&document.activeElement===qi)qi.blur();
-  toast('تمت إضافة '+gb+' GB');
-  await poll();
+  toast('تمت إضافة '+gb+' GB');await poll();
 }
 async function togBlk(mac,blk){await api('device_block',{mac,blocked:blk});toast(blk?'تم الحظر':'تم فك الحظر');await poll();}
 async function togVip(mac,vip){await api('device_gaming',{mac,gaming_mode:vip});toast(vip?'تم تفعيل VIP':'تم إلغاء VIP');await poll();}
@@ -1208,24 +1598,28 @@ async function delDev(mac){if(!confirm('حذف هذا الجهاز وتصفير 
 async function resetAllUsage(){if(!confirm('تصفير استهلاك كل الأجهزة؟'))return;await api('meter_reset_all',{});toast('تم تصفير جميع العدادات');await poll();}
 
 async function saveMainQuota(){
-  await api('main_quota',{
-    main_quota_bytes:Math.round((parseFloat($('qMainGb').value)||0)*gbUnit()),
-    start_date:$('qStart').value,end_date:$('qEnd').value,period_days:parseInt($('qDays').value)||30,
-    wan_down_kbps:Math.round((parseFloat($('qWanD').value)||0)*1000),
-    wan_up_kbps:Math.round((parseFloat($('qWanU').value)||0)*1000)
-  });toast('تم حفظ الباقة الرئيسية وإعدادات السرعة');poll();
+  await api('main_quota',{main_quota_bytes:Math.round((parseFloat($('qMainGb').value)||0)*gbUnit()),start_date:$('qStart').value,end_date:$('qEnd').value,period_days:parseInt($('qDays').value)||30,wan_down_kbps:Math.round((parseFloat($('qWanD').value)||0)*1000),wan_up_kbps:Math.round((parseFloat($('qWanU').value)||0)*1000)});
+  toast('تم حفظ الباقة الرئيسية وإعدادات السرعة');poll();
 }
 async function saveMeterScale(){
-  await api('meter_scale',{
-    gb_standard:parseInt($('qStd').value),scale_pct:parseInt($('qPct').value),scale_mode:parseInt($('qMode').value)
-  });toast('تم حفظ المعايرة');poll();
+  await api('meter_scale',{gb_standard:parseInt($('qStd').value),scale_pct:parseInt($('qPct').value),scale_mode:parseInt($('qMode').value)});
+  toast('تم حفظ المعايرة');poll();
 }
-
 function toggleWanFields(){
   const p=$('wanProto').value;
   $('wanStatic').classList.toggle('hide',p!=='static');
   $('wanPppoe').classList.toggle('hide',p!=='pppoe');
 }
+function updateDhcpPreview(){
+  const ip=($('lanIp').value||'192.168.1.1').trim().split('.');
+  if(ip.length!==4){$('dhcpRangePreview').textContent='-';return;}
+  const pre=ip.slice(0,3).join('.');
+  const st=Math.max(2,Math.min(254,parseInt($('dhcpStart').value,10)||100));
+  const lm=Math.max(1,Math.min(250,parseInt($('dhcpLimit').value,10)||150));
+  const end=Math.min(254,st+lm-1);
+  $('dhcpRangePreview').textContent=`${pre}.${st} — ${pre}.${end}`;
+}
+let origLanIp='';
 async function loadNetInfo(){
   try{
     const r=await api('net_info');if(!r.ok)return;
@@ -1235,159 +1629,218 @@ async function loadNetInfo(){
     $('wanProto').value=r.wan.proto||'dhcp';$('wanIp').value=r.wan.ipaddr||'';$('wanMask').value=r.wan.netmask||'';
     $('wanGw').value=r.wan.gateway||'';$('wanDns').value=r.wan.dns||'';$('wanUser').value=r.wan.username||'';
     toggleWanFields();
+    if(r.lan){origLanIp=r.lan.ipaddr||'192.168.1.1';$('lanIp').value=origLanIp;$('lanMask').value=r.lan.netmask||'255.255.255.0';}
+    if(r.dhcp){
+      $('dhcpEn').checked=r.dhcp.enabled!==false;
+      $('dhcpFields').classList.toggle('hide',!$('dhcpEn').checked);
+      $('dhcpStart').value=r.dhcp.start||'100';$('dhcpLimit').value=r.dhcp.limit||'150';
+      $('dhcpLease').value=r.dhcp.leasetime||'12h';$('dhcpDns').value=r.dhcp.dns||'';
+    }
+    updateDhcpPreview();
   }catch(e){}
 }
 async function saveNetInfo(){
-  const b={
-    ssid:$('wSsid').value,key:$('wKey').value,encryption:$('wEnc').value,channel:$('wChan').value,
-    htmode:$('wHt').value,txpower:$('wTxp').value,country:$('wCountry').value,wifi_disabled:$('wDis').checked,
-    wan_proto:$('wanProto').value,wan_ip:$('wanIp').value,wan_mask:$('wanMask').value,
-    wan_gw:$('wanGw').value,wan_dns:$('wanDns').value,wan_user:$('wanUser').value,wan_pass:$('wanPass').value
-  };
-  await api('net_save',b);toast('تم تطبيق إعدادات الوايفاي والإنترنت');
+  const r=await api('net_save',{ssid:$('wSsid').value,key:$('wKey').value,encryption:$('wEnc').value,channel:$('wChan').value,htmode:$('wHt').value,txpower:$('wTxp').value,country:$('wCountry').value,wifi_disabled:$('wDis').checked,wan_proto:$('wanProto').value,wan_ip:$('wanIp').value,wan_mask:$('wanMask').value,wan_gw:$('wanGw').value,wan_dns:$('wanDns').value,wan_user:$('wanUser').value,wan_pass:$('wanPass').value});
+  toast(r.msg||'تم تطبيق إعدادات الوايفاي والإنترنت');
 }
-
+async function saveLanDhcp(){
+  const newIp=$('lanIp').value.trim();
+  const r=await api('net_save',{lan_ip:newIp,lan_mask:$('lanMask').value.trim(),dhcp_enabled:$('dhcpEn').checked,dhcp_start:$('dhcpStart').value,dhcp_limit:$('dhcpLimit').value,dhcp_lease:$('dhcpLease').value,dhcp_dns:$('dhcpDns').value.trim()});
+  if(!r.ok){toast(r.msg||'تأكد من صحة البيانات');return;}
+  if(newIp && origLanIp && newIp!==origLanIp){
+    toast('تم تغيير IP الراوتر — جاري التحويل إلى '+newIp);
+    setTimeout(()=>{window.location.href='http://'+newIp+'/';},3500);
+  } else {
+    toast('تم حفظ وتطبيق إعدادات LAN وDHCP');
+  }
+}
+const PRAY_NAMES=['الفجر','الظهر','العصر','المغرب','العشاء'];
+let fzCards=[], fzMacs=[];
+function onAzSrcChange(){
+  if($('fzAzSrc').value==='quran') $('fzAzUrl').value='https://api.alquran.cloud/v1/ayah/random/quran-uthmani';
+}
+function renderPrayerGrid(times, onArr, offArr){
+  $('fzPrayerGrid').innerHTML=PRAY_NAMES.map((nm,i)=>`
+    <div class="kv" style="text-align:center">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <label style="font-size:11px;font-weight:700;cursor:pointer"><input type="checkbox" class="fz-pon" data-i="${i}" ${onArr[i]!==false?'checked':''}> ${nm}</label>
+        <input class="tinp num fz-poff" data-i="${i}" type="number" min="-30" max="30" value="${offArr[i]||0}" style="width:44px;text-align:center" title="تعديل بالدقائق (±)">
+      </div>
+      <strong class="num" style="font-size:14px;color:var(--pri)">${esc((times&&times[i])||'--:--')}</strong>
+    </div>`).join('');
+}
+function renderFazakkirDevs(){
+  const box=$('fzDevList'); if(!box||!S||!S.devices)return;
+  const set=new Set(fzMacs.map(m=>m.toUpperCase()));
+  box.innerHTML=S.devices.map(d=>{
+    const chk=set.has((d.mac||'').toUpperCase())?'checked':'';
+    return `<label class="chk" style="margin:0;font-size:11px"><input type="checkbox" class="fz-mac" value="${esc(d.mac)}" ${chk}> <span>${esc(d.name||d.mac)} <small style="color:var(--muted)">(${esc(d.ip||'-')})</small></span></label>`;
+  }).join('')||'<span style="color:var(--muted);font-size:11px">لا توجد أجهزة مسجلة</span>';
+}
+function renderAzkarCards(){
+  const box=$('fzCardsWrap'); if(!box)return;
+  box.innerHTML=fzCards.map((c,i)=>`
+    <div class="alert-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+        <label class="chk" style="margin:0"><input type="checkbox" ${c.enabled!==false?'checked':''} onchange="fzCards[${i}].enabled=this.checked"> <b>بطاقة #${i+1}</b></label>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="sec-badge num">أُرسل اليوم: ${c.sent_today||0}</span>
+          <label style="font-size:10.5px;color:var(--muted)">حد/يوم: <input class="tinp num" type="number" min="0" max="50" value="${c.max_daily??2}" style="width:44px;text-align:center" onchange="fzCards[${i}].max_daily=parseInt(this.value,10)||0"></label>
+          <button class="btn sm err" type="button" onclick="fzCards.splice(${i},1);renderAzkarCards()">🗑</button>
+        </div>
+      </div>
+      <textarea class="inp" style="min-height:54px" oninput="fzCards[${i}].text=this.value">${esc(c.text||'')}</textarea>
+    </div>`).join('')||'<p style="color:var(--muted)">لا توجد بطاقات. اضغط "+ إضافة بطاقة" أو "جلب للبطاقات الآن".</p>';
+}
+function addZikrCard(){
+  if(fzCards.length>=24){toast('الحد الأقصى 24 بطاقة');return;}
+  fzCards.push({text:'',enabled:true,max_daily:2,sent_today:0});
+  renderAzkarCards();
+}
+async function loadFazakkir(){
+  try{
+    const r=await api('fazakkir_get'); if(!r.ok)return;
+    $('fzDate').textContent=r.prayer_date||'غير محدث';
+    $('fzPrayEn').checked=r.prayer_enabled!==false;
+    $('fzCity').value=r.city||'Cairo'; $('fzCountry').value=r.country||'Egypt';
+    $('fzMethod').value=String(r.method||5);
+    $('fzPrayRec').value=String(r.prayer_recipient_mode||0);
+    $('fzPrayRep').value=r.prayer_repeat_min??10;
+    $('fzAction').value=String(r.prayer_action||0);
+    $('fzKbpsWrap').classList.toggle('hide',$('fzAction').value!=='2');
+    $('fzKbps').value=r.prayer_kbps||5;
+    $('fzDur').value=r.prayer_dur_min||15;
+    fzMacs=r.prayer_macs||[];
+    renderPrayerGrid(r.prayer_times, r.prayer_on||[true,true,true,true,true], r.prayer_offset||[0,0,0,0,0]);
+    renderFazakkirDevs();
+    $('fzAzEn').checked=!!r.azkar_enabled;
+    $('fzAzInt').value=r.azkar_interval_min||60;
+    $('fzAzRec').value=String(r.azkar_recipient_mode||0);
+    $('fzAzAuto').checked=!!r.azkar_auto_fetch;
+    $('fzAzSrc').value=r.azkar_source_mode||'quran';
+    $('fzAzUrl').value=r.azkar_url||'https://api.alquran.cloud/v1/ayah/random/quran-uthmani';
+    fzCards=(r.cards||[]).map(c=>({text:c.text||'',enabled:c.enabled!==false,max_daily:c.max_daily??2,sent_today:c.sent_today||0}));
+    renderAzkarCards();
+  }catch(e){}
+}
+async function saveFazakkir(){
+  const pOn=[], pOff=[];
+  document.querySelectorAll('.fz-pon').forEach(el=>{pOn[+el.dataset.i]=el.checked;});
+  document.querySelectorAll('.fz-poff').forEach(el=>{pOff[+el.dataset.i]=parseInt(el.value,10)||0;});
+  const macs=[];
+  document.querySelectorAll('.fz-mac:checked').forEach(el=>macs.push(el.value));
+  fzMacs=macs;
+  const payload={
+    prayer_enabled:$('fzPrayEn').checked,
+    city:$('fzCity').value.trim()||'Cairo',
+    country:$('fzCountry').value.trim()||'Egypt',
+    method:parseInt($('fzMethod').value,10)||5,
+    prayer_on:pOn, prayer_offset:pOff,
+    prayer_recipient_mode:parseInt($('fzPrayRec').value,10)||0,
+    prayer_repeat_min:parseInt($('fzPrayRep').value,10)||0,
+    prayer_action:parseInt($('fzAction').value,10)||0,
+    prayer_kbps:parseInt($('fzKbps').value,10)||5,
+    prayer_dur_min:parseInt($('fzDur').value,10)||15,
+    prayer_macs:macs,
+    azkar_enabled:$('fzAzEn').checked,
+    azkar_interval_min:parseInt($('fzAzInt').value,10)||60,
+    azkar_recipient_mode:parseInt($('fzAzRec').value,10)||0,
+    azkar_auto_fetch:$('fzAzAuto').checked,
+    azkar_source_mode:$('fzAzSrc').value,
+    azkar_url:$('fzAzUrl').value.trim(),
+    cards:fzCards.filter(c=>c.text.trim()).map(c=>({text:c.text.trim(),enabled:c.enabled!==false,max_daily:parseInt(c.max_daily,10)||0}))
+  };
+  const r=await api('fazakkir_save',payload);
+  toast(r.ok?'تم حفظ وتطبيق إعدادات فذكر':'حدث خطأ أثناء الحفظ');
+}
+async function refreshPrayers(){
+  await saveFazakkir();
+  toast('جاري جلب مواقيت الصلاة...');
+  const r=await api('fazakkir_refresh');
+  toast(r.msg||(r.ok?'تم تحديث المواقيت':'تعذر الجلب'));
+  if(r.ok) loadFazakkir();
+}
+async function autolocatePrayers(){
+  toast('جاري تحديد موقعك تلقائياً...');
+  const r=await api('fazakkir_autolocate');
+  toast(r.msg||(r.ok?'تم التحديد':'تعذر التحديد'));
+  if(r.ok) loadFazakkir();
+}
+async function fetchZikrNow(){
+  await saveFazakkir();
+  toast('جاري جلب ذكر من المصدر...');
+  const r=await api('fazakkir_fetch_zikr');
+  toast(r.msg||(r.ok?'تمت الإضافة':'تعذر الجلب'));
+  if(r.ok) loadFazakkir();
+}
+async function testFazakkir(kind){
+  await saveFazakkir();
+  const r=await api('fazakkir_test',{kind});
+  toast(r.msg||(r.ok?'تم الإرسال':'تعذر الإرسال'));
+}
 async function saveTg(test){
-  const r=await api('telegram_save',{
-    enabled:$('tgEn').checked,interactive:$('tgInter').checked,token:$('tgTok').value.trim(),
-    admin_ids:$('tgIds').value.trim(),thresholds:$('tgThr').value.trim(),test:!!test
-  });
+  const r=await api('telegram_save',{enabled:$('tgEn').checked,interactive:$('tgInter').checked,token:$('tgTok').value.trim(),admin_ids:$('tgIds').value.trim(),thresholds:$('tgThr').value.trim(),test:!!test});
   toast(r.msg||(r.ok?'تم حفظ إعدادات تليجرام':'حدث خطأ'));poll();
 }
 function renderTgUsers(){
   const dl=$('tgUsersDL');
   if(dl) dl.innerHTML=TG_USERS.map(u=>`<option value="${esc(u.chat_id)}">${esc(u.name||'User')} (${esc(u.chat_id)})</option>`).join('');
-  if(!TG_USERS.length){$('tgUsersList').innerHTML='<span style="font-size:12px;color:var(--muted)">لم يتواصل أحد مع البوت بعد.</span>';return;}
-  $('tgUsersList').innerHTML=TG_USERS.map(u=>`<div class="pill" style="justify-content:space-between;width:100%">
-    <span>${esc(u.name||'User')} — <code>${esc(u.chat_id)}</code></span>
-    <button class="btn sm" onclick="navigator.clipboard?.writeText('${esc(u.chat_id)}');toast('تم نسخ المعرف')">نسخ ID</button>
-  </div>`).join('');
+  if(!TG_USERS.length){$('tgUsersList').innerHTML='<span style="font-size:11.5px;color:var(--muted)">لم يتواصل أحد مع البوت بعد.</span>';return;}
+  $('tgUsersList').innerHTML=TG_USERS.map(u=>`<div class="pill" style="justify-content:space-between;width:100%"><span>${esc(u.name||'User')} — <code class="code">${esc(u.chat_id)}</code></span><button class="btn sm" onclick="navigator.clipboard?.writeText('${esc(u.chat_id)}');toast('تم نسخ المعرف')">نسخ ID</button></div>`).join('');
 }
-
-function getAlertThresholds(){
-  return ($('tgThr').value||'50,75,90,95,100').split(',').map(x=>parseInt(x.trim(),10)).filter(n=>n>0&&n<=100).slice(0,8);
-}
+function getAlertThresholds(){return ($('tgThr').value||'50,75,90,95,100').split(',').map(x=>parseInt(x.trim(),10)).filter(n=>n>0&&n<=100).slice(0,8);}
 function buildAlertEditors(preserveDrafts){
   const box=$('tgAlertEditors'); if(!box)return;
   const drafts=[];
-  if(preserveDrafts){
-    box.querySelectorAll('textarea').forEach((ta,idx)=>{drafts[idx]=ta.value;});
-  }
+  if(preserveDrafts) box.querySelectorAll('textarea').forEach((ta,idx)=>{drafts[idx]=ta.value;});
   const saved=(S&&Array.isArray(S.tg_alert_msgs))?S.tg_alert_msgs:[];
   const thrs=getAlertThresholds();
-  if(!thrs.length){box.innerHTML='<p style="color:var(--muted);font-size:12px">أدخل نسب تنبيه صحيحة مثل 50,75,90,95,100</p>';return;}
+  if(!thrs.length){box.innerHTML='<p style="color:var(--muted);font-size:11.5px">أدخل نسب تنبيه صحيحة مثل 50,75,90,95,100</p>';return;}
   box.innerHTML=thrs.map((p,i)=>{
     const val=preserveDrafts&&drafts[i]!==undefined?drafts[i]:(saved[i]||'');
-    return `<div class="alert-card">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <b>🔔 تنبيه عند نسبة ${p}%</b>
-        <small style="color:var(--muted)">خانة #${i+1}</small>
-      </div>
-      <textarea data-idx="${i}" placeholder="اتركه فارغاً للنص الافتراضي أو اكتب رسالة مخصصة مع {name} و {pct}% و {used} و {rem}..." onfocus="lastAlertEl=this">${esc(val)}</textarea>
-    </div>`;
+    return `<div class="alert-card"><div style="display:flex;justify-content:space-between;align-items:center"><b>🔔 تنبيه عند نسبة ${p}%</b><small style="color:var(--muted)">خانة #${i+1}</small></div><textarea data-idx="${i}" placeholder="اتركه فارغاً للنص الافتراضي أو اكتب رسالة مخصصة مع {name} و {pct}% و {used} و {rem}..." onfocus="lastAlertEl=this">${esc(val)}</textarea></div>`;
   }).join('');
 }
 $('tgThr').oninput=()=>buildAlertEditors(true);
 function insAlertVar(v){
-  const box=$('tgAlertEditors');
-  const ta=lastAlertEl||(box?box.querySelector('textarea'):null);
+  const box=$('tgAlertEditors'), ta=lastAlertEl||(box?box.querySelector('textarea'):null);
   if(!ta){toast('اختر خانة رسالة أولاً');return;}
   const st=ta.selectionStart??ta.value.length, en=ta.selectionEnd??ta.value.length;
-  ta.value=ta.value.slice(0,st)+v+ta.value.slice(en);
-  ta.focus();
-  ta.selectionStart=ta.selectionEnd=st+v.length;
+  ta.value=ta.value.slice(0,st)+v+ta.value.slice(en);ta.focus();ta.selectionStart=ta.selectionEnd=st+v.length;
 }
 async function saveTgAlerts(){
   const msgs=Array(8).fill('');
-  $('tgAlertEditors').querySelectorAll('textarea').forEach(ta=>{
-    const idx=parseInt(ta.dataset.idx,10);
-    if(idx>=0&&idx<8) msgs[idx]=ta.value.slice(0,250);
-  });
+  $('tgAlertEditors').querySelectorAll('textarea').forEach(ta=>{const idx=parseInt(ta.dataset.idx,10);if(idx>=0&&idx<8)msgs[idx]=ta.value.slice(0,250);});
   const r=await api('tg_alerts_save',{tg_alert_msgs:msgs});
-  if(r.ok){toast('تم حفظ قوالب الإشعارات');await poll();}
-  else toast(r.error||'فشل الحفظ');
+  if(r.ok){toast('تم حفظ قوالب الإشعارات');await poll();}else toast(r.error||'فشل الحفظ');
 }
-async function resetTgAlerts(){
-  if(!confirm('مسح جميع القوالب المخصصة والعودة للنص الافتراضي؟'))return;
-  $('tgAlertEditors').querySelectorAll('textarea').forEach(ta=>ta.value='');
-  await saveTgAlerts();
-}
-
-function autoTz(){
-  const tz=Math.round(-new Date().getTimezoneOffset()/60);
-  $('rbTz').value=tz;
-  toast('تم ضبط المنطقة الزمنية على UTC'+(tz>=0?'+':'')+tz);
-}
-async function syncNtp(){
-  toast('جاري مزامنة الوقت عبر الإنترنت...');
-  const r=await api('ntp_sync',{});
-  toast(r.msg||r.error||(r.ok?'تمت المزامنة':'فشلت المزامنة'));
-  poll();
-}
-async function saveSysOpts(){
-  const r=await api('sys_opts_save',{observer_mode:$('obsMode').checked,ota_auto_check:$('otaAutoChk').checked});
-  toast(r.msg||(r.ok?'تم حفظ خيارات النظام':'فشل الحفظ'));
-  poll();
-}
-async function saveAutoReboot(){
-  await api('auto_reboot',{enabled:$('rbEn').checked,hour:parseInt($('rbHr').value)||0,min:parseInt($('rbMn').value)||0,tz:parseInt($('rbTz').value)||0});
-  toast('تم حفظ جدولة إعادة التشغيل');poll();
-}
+async function resetTgAlerts(){if(!confirm('مسح جميع القوالب المخصصة والعودة للنص الافتراضي؟'))return;$('tgAlertEditors').querySelectorAll('textarea').forEach(ta=>ta.value='');await saveTgAlerts();}
+function autoTz(){const tz=Math.round(-new Date().getTimezoneOffset()/60);$('rbTz').value=tz;toast('تم ضبط المنطقة الزمنية على UTC'+(tz>=0?'+':'')+tz);}
+async function syncNtp(){toast('جاري مزامنة الوقت عبر الإنترنت...');const r=await api('ntp_sync',{});toast(r.msg||r.error||(r.ok?'تمت المزامنة':'فشلت المزامنة'));poll();}
+async function saveSysOpts(){const r=await api('sys_opts_save',{observer_mode:$('obsMode').checked,ota_auto_check:$('otaAutoChk').checked});toast(r.msg||(r.ok?'تم حفظ خيارات النظام':'فشل الحفظ'));poll();}
+async function saveAutoReboot(){await api('auto_reboot',{enabled:$('rbEn').checked,hour:parseInt($('rbHr').value)||0,min:parseInt($('rbMn').value)||0,tz:parseInt($('rbTz').value)||0});toast('تم حفظ جدولة إعادة التشغيل');poll();}
 async function rebootNow(){if(!confirm('إعادة تشغيل الراوتر الآن؟'))return;await api('reboot_now',{countdown_s:3});toast('جاري إعادة التشغيل...');poll();}
-async function rebootCountdownMin(){
-  const m=parseInt($('rbCdMin').value,10)||1;
-  await api('reboot_now',{countdown_s:m*60});
-  toast('سيعاد التشغيل بعد '+m+' دقيقة');poll();
-}
-async function cancelRebootTimer(){
-  await api('reboot_now',{countdown_s:-1});
-  toast('تم إلغاء مؤقت إعادة التشغيل');poll();
-}
-async function changePass(){
-  const r=await api('password',{old_password:$('pOld').value,new_username:$('pUser').value.trim(),new_password:$('pNew').value});
-  if(r.ok){toast('تم تحديث بيانات الدخول');$('pOld').value='';$('pNew').value='';}else toast(r.error||'فشل التحديث');
-}
-
-async function saveOtaUrl(){
-  await api('ota_save',{ota_version_url:$('otaVerUrl').value.trim(),ota_auto_check:$('otaAutoChk').checked});
-  toast('تم حفظ رابط التحقق');
-}
+async function rebootCountdownMin(){const m=parseInt($('rbCdMin').value,10)||1;await api('reboot_now',{countdown_s:m*60});toast('سيعاد التشغيل بعد '+m+' دقيقة');poll();}
+async function cancelRebootTimer(){await api('reboot_now',{countdown_s:-1});toast('تم إلغاء مؤقت إعادة التشغيل');poll();}
+async function changePass(){const r=await api('password',{old_password:$('pOld').value,new_username:$('pUser').value.trim(),new_password:$('pNew').value});if(r.ok){toast('تم تحديث بيانات الدخول');$('pOld').value='';$('pNew').value='';}else toast(r.error||'فشل التحديث');}
+async function saveOtaUrl(){await api('ota_save',{ota_version_url:$('otaVerUrl').value.trim(),ota_auto_check:$('otaAutoChk').checked});toast('تم حفظ رابط التحقق');}
 async function checkOta(){
   $('otaRes').textContent='جاري الفحص...';
   const r=await api('ota_check',{url:$('otaVerUrl').value.trim()});
   if(r.ok&&r.remote){
-    const note=r.remote.changelog||r.remote.notes||'';
-    const bUrl=r.remote.firmware_url||r.remote.url||'';
+    const note=r.remote.changelog||r.remote.notes||'', bUrl=r.remote.firmware_url||r.remote.url||'';
     $('otaRes').innerHTML=`أحدث إصدار: <b>${esc(r.remote.version||'?')}</b>${note?(' — '+esc(note)):''}`;
     if(bUrl)$('otaBinUrl').value=bUrl;
   } else $('otaRes').textContent=r.error||'فشل الفحص';
 }
-async function flashOtaUrl(){
-  const u=$('otaBinUrl').value.trim();if(!u||!confirm('تثبيت التحديث من الرابط؟'))return;
-  toast('جاري التنزيل والتحقق...');
-  const r=await api('ota_url',{url:u});toast(r.msg||r.error||'تم');
-}
+async function flashOtaUrl(){const u=$('otaBinUrl').value.trim();if(!u||!confirm('تثبيت التحديث من الرابط؟'))return;toast('جاري التنزيل والتحقق...');const r=await api('ota_url',{url:u});toast(r.msg||r.error||'تم');}
 function uploadOtaFile(){
   const f=$('otaFile').files[0];if(!f){toast('اختر ملف .bin أولاً');return;}
   if(!confirm('تثبيت ملف الفيرموير '+f.name+'؟'))return;
-  const bar=$('otaProgBar'),fill=$('otaProgFill');bar.classList.remove('hide');fill.style.width='0%';
-  stopPoll();
-  let uploadDone=false;
-  const xhr=new XMLHttpRequest();
-  xhr.timeout=180000;
-  xhr.open('POST','/cgi-bin/api?action=ota_upload');
-  xhr.upload.onprogress=e=>{if(e.lengthComputable){const p=(e.loaded*100)/e.total;fill.style.width=p.toFixed(0)+'%';if(e.loaded>=e.total)uploadDone=true;}};
-  xhr.onload=()=>{
-    startPoll();
-    if(xhr.status!==200){toast('فشل التحديث: HTTP '+xhr.status);return;}
-    try{
-      const r=JSON.parse(xhr.responseText);
-      toast(r.msg||r.error||(r.ok?'تم التحديث':'فشل التحديث'));
-      if(!r.ok)bar.classList.add('hide');
-    }catch(e){
-      toast(uploadDone&&!xhr.responseText?'⚠️ تم استلام الملف — تحقق من إعادة التشغيل بعد دقيقة':'❌ استجابة غير متوقعة من الراوتر أثناء التحديث');
-    }
-  };
+  const bar=$('otaProgBar'),fill=$('otaProgFill');bar.classList.remove('hide');fill.style.width='0%';stopPoll();
+  let uploadDone=false;const xhr=new XMLHttpRequest();xhr.timeout=180000;xhr.open('POST','/cgi-bin/api?action=ota_upload');
+  xhr.upload.onprogress=e=>{if(e.lengthComputable){fill.style.width=((e.loaded*100)/e.total).toFixed(0)+'%';if(e.loaded>=e.total)uploadDone=true;}};
+  xhr.onload=()=>{startPoll();if(xhr.status!==200){toast('فشل التحديث: HTTP '+xhr.status);return;}try{const r=JSON.parse(xhr.responseText);toast(r.msg||r.error||(r.ok?'تم التحديث':'فشل التحديث'));if(!r.ok)bar.classList.add('hide');}catch(e){toast(uploadDone&&!xhr.responseText?'⚠️ تم استلام الملف — تحقق من إعادة التشغيل بعد دقيقة':'❌ استجابة غير متوقعة من الراوتر أثناء التحديث');}};
   xhr.onerror=()=>{startPoll();toast('❌ انقطع الاتصال أثناء رفع ملف التحديث');};
   xhr.ontimeout=()=>{startPoll();toast('❌ انتهى وقت التحقق من التحديث — حاول مجدداً');};
   xhr.send(f);
@@ -1396,10 +1849,8 @@ function uploadOtaFile(){
 (async function init(){
   try{
     const a=await api('auth_status');
-    isAdmin=!!a.authenticated;
-    observerMode=!!a.observer_mode;
-    if(isAdmin||observerMode){showApp();await poll();startPoll();}
-    else showLogin();
+    isAdmin=!!a.authenticated;observerMode=!!a.observer_mode;
+    if(isAdmin||observerMode){showApp();await poll();startPoll();}else showLogin();
   }catch(e){showLogin();}
 })();
 </script>

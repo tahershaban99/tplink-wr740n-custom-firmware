@@ -3,6 +3,7 @@
 #include "firewall.h"
 #include "telegram.h"
 #include "json_util.h"
+#include "fazakkir.h"
 
 #include <errno.h>
 #include <pthread.h>
@@ -280,6 +281,46 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
         meter_save_all();
         meter_write_ram_json();
         snprintf(resp, resp_sz, "{\"ok\":true}");
+    } else if (strcmp(action, "fazakkir_reload") == 0) {
+        fazakkir_reload();
+        snprintf(resp, resp_sz, "{\"ok\":true}");
+    } else if (strcmp(action, "fazakkir_refresh") == 0) {
+        char err[128] = {0};
+        bool ok = fazakkir_refresh_prayers(err, sizeof(err));
+        char es[256];
+        json_escape(err, es, sizeof(es));
+        snprintf(resp, resp_sz, "{\"ok\":%s,\"msg\":\"%s\"}",
+                 ok ? "true" : "false", ok ? "تم تحديث مواقيت الصلاة" : es);
+    } else if (strcmp(action, "fazakkir_autolocate") == 0) {
+        char city[48] = {0}, country[48] = {0}, err[128] = {0};
+        bool ok = fazakkir_autolocate(city, sizeof(city), country, sizeof(country), err, sizeof(err));
+        if (ok) {
+            char dummy[128];
+            fazakkir_refresh_prayers(dummy, sizeof(dummy));
+        }
+        char ec[96], eco[96], eerr[256];
+        json_escape(city, ec, sizeof(ec));
+        json_escape(country, eco, sizeof(eco));
+        json_escape(err, eerr, sizeof(eerr));
+        snprintf(resp, resp_sz, "{\"ok\":%s,\"city\":\"%s\",\"country\":\"%s\",\"msg\":\"%s\"}",
+                 ok ? "true" : "false", ec, eco, ok ? "تم تحديد الموقع وتحديث المواقيت" : eerr);
+    } else if (strcmp(action, "fazakkir_fetch_zikr") == 0) {
+        char txt[384] = {0}, err[128] = {0};
+        bool ok = fazakkir_fetch_zikr(true, txt, sizeof(txt), err, sizeof(err));
+        char et[768], eerr[256];
+        json_escape(txt, et, sizeof(et));
+        json_escape(err, eerr, sizeof(eerr));
+        snprintf(resp, resp_sz, "{\"ok\":%s,\"text\":\"%s\",\"msg\":\"%s\"}",
+                 ok ? "true" : "false", et, ok ? "تم جلب الذكر وإضافته للبطاقات" : eerr);
+    } else if (strcmp(action, "fazakkir_test") == 0) {
+        uint64_t kind = 0;
+        json_get_u64(req, "kind", &kind);
+        char err[128] = {0};
+        bool ok = fazakkir_send_test((int)kind, err, sizeof(err));
+        char eerr[256];
+        json_escape(err, eerr, sizeof(eerr));
+        snprintf(resp, resp_sz, "{\"ok\":%s,\"msg\":\"%s\"}",
+                 ok ? "true" : "false", ok ? "تم إرسال الإشعار التجريبي على تيليجرام" : eerr);
     } else {
         snprintf(resp, resp_sz, "{\"ok\":false,\"error\":\"unknown action\"}");
     }
@@ -312,7 +353,7 @@ static void *ctrl_ipc_thread(void *arg) {
         ssize_t n = read(cli, req, sizeof(req) - 1);
         if (n > 0) {
             req[n] = '\0';
-            char resp[512] = {0};
+            char resp[2048] = {0};
             process_ctrl_json(req, resp, sizeof(resp));
             write(cli, resp, strlen(resp));
         }
@@ -331,6 +372,7 @@ int main(void) {
     meter_init();
     meter_write_ram_json();
     telegram_init();
+    fazakkir_init();
 
     pthread_t ipc_tid;
     if (pthread_create(&ipc_tid, NULL, ctrl_ipc_thread, NULL) == 0) {
@@ -349,6 +391,7 @@ int main(void) {
         last_tick = now;
 
         meter_tick(dt);
+        fazakkir_tick(now);
         meter_write_ram_json();
 
         if (g_flash_dirty && (now - last_save >= 600)) {

@@ -210,9 +210,18 @@ static bool safe_uci_str(const char *s) {
     return true;
 }
 
+static bool valid_ipv4(const char *s) {
+    if (!s || !s[0]) return false;
+    int a, b, c, d;
+    char extra = 0;
+    if (sscanf(s, "%d.%d.%d.%d%c", &a, &b, &c, &d, &extra) != 4) return false;
+    return (a >= 0 && a <= 255 && b >= 0 && b <= 255 && c >= 0 && c <= 255 && d >= 0 && d <= 255);
+}
+
 static void handle_net_info(void) {
     char ssid[64], key[96], enc[32], chan[16], ht[16], dis[8], txp[16], country[8];
     char wan_proto[24], wan_ip[24], wan_mask[24], wan_gw[24], wan_dns[64], wan_user[64];
+    char lan_ip[24], lan_mask[24], dhcp_ign[8], dhcp_start[16], dhcp_limit[16], dhcp_lease[16], dhcp_opt[96];
 
     read_uci_val("wireless.default_radio0.ssid", ssid, sizeof(ssid));
     read_uci_val("wireless.default_radio0.key", key, sizeof(key));
@@ -230,22 +239,44 @@ static void handle_net_info(void) {
     read_uci_val("network.wan.dns", wan_dns, sizeof(wan_dns));
     read_uci_val("network.wan.username", wan_user, sizeof(wan_user));
 
-    char es_ssid[128], es_key[192], es_dns[128], es_wuser[128];
+    read_uci_val("network.lan.ipaddr", lan_ip, sizeof(lan_ip));
+    read_uci_val("network.lan.netmask", lan_mask, sizeof(lan_mask));
+    read_uci_val("dhcp.lan.ignore", dhcp_ign, sizeof(dhcp_ign));
+    read_uci_val("dhcp.lan.start", dhcp_start, sizeof(dhcp_start));
+    read_uci_val("dhcp.lan.limit", dhcp_limit, sizeof(dhcp_limit));
+    read_uci_val("dhcp.lan.leasetime", dhcp_lease, sizeof(dhcp_lease));
+    read_uci_val("dhcp.lan.dhcp_option", dhcp_opt, sizeof(dhcp_opt));
+
+    /* Strip leading "6," from dhcp_option if present */
+    char dhcp_dns[80] = {0};
+    if (strncmp(dhcp_opt, "6,", 2) == 0) {
+        snprintf(dhcp_dns, sizeof(dhcp_dns), "%s", dhcp_opt + 2);
+        for (size_t i = 0; dhcp_dns[i]; i++) if (dhcp_dns[i] == ',') dhcp_dns[i] = ' ';
+    }
+
+    char es_ssid[128], es_key[192], es_dns[128], es_wuser[128], es_ddns[128];
     json_escape(ssid, es_ssid, sizeof(es_ssid));
     json_escape(key, es_key, sizeof(es_key));
     json_escape(wan_dns, es_dns, sizeof(es_dns));
     json_escape(wan_user, es_wuser, sizeof(es_wuser));
+    json_escape(dhcp_dns, es_ddns, sizeof(es_ddns));
 
     send_json_hdr(NULL);
     printf("{\"ok\":true,\"wifi\":{\"ssid\":\"%s\",\"key\":\"%s\",\"encryption\":\"%s\","
            "\"channel\":\"%s\",\"htmode\":\"%s\",\"disabled\":%s,\"txpower\":\"%s\",\"country\":\"%s\"},"
            "\"wan\":{\"proto\":\"%s\",\"ipaddr\":\"%s\",\"netmask\":\"%s\","
-           "\"gateway\":\"%s\",\"dns\":\"%s\",\"username\":\"%s\"}}\n",
+           "\"gateway\":\"%s\",\"dns\":\"%s\",\"username\":\"%s\"},"
+           "\"lan\":{\"ipaddr\":\"%s\",\"netmask\":\"%s\"},"
+           "\"dhcp\":{\"enabled\":%s,\"start\":\"%s\",\"limit\":\"%s\",\"leasetime\":\"%s\",\"dns\":\"%s\"}}\n",
            es_ssid, es_key, enc[0] ? enc : "psk2",
            chan[0] ? chan : "auto", ht[0] ? ht : "HT40",
            (strcmp(dis, "1") == 0) ? "true" : "false", txp,
            country[0] ? country : "JP",
-           wan_proto[0] ? wan_proto : "dhcp", wan_ip, wan_mask, wan_gw, es_dns, es_wuser);
+           wan_proto[0] ? wan_proto : "dhcp", wan_ip, wan_mask, wan_gw, es_dns, es_wuser,
+           lan_ip[0] ? lan_ip : "192.168.1.1", lan_mask[0] ? lan_mask : "255.255.255.0",
+           (strcmp(dhcp_ign, "1") == 0) ? "false" : "true",
+           dhcp_start[0] ? dhcp_start : "100", dhcp_limit[0] ? dhcp_limit : "150",
+           dhcp_lease[0] ? dhcp_lease : "12h", es_ddns);
 }
 
 static void handle_net_save(const char *body) {
@@ -322,12 +353,95 @@ static void handle_net_save(const char *body) {
         if (wpass[0]) { snprintf(cmd, sizeof(cmd), "uci set network.wan.password='%s'", wpass); system(cmd); }
     }
 
-    system("uci commit wireless; (sleep 1; wifi reload) >/dev/null 2>&1 &");
-    if (wan_changed) {
+    char lan_ip[24] = {0}, lan_mask[24] = {0}, d_start[16] = {0}, d_limit[16] = {0}, d_lease[16] = {0}, d_dns[64] = {0};
+    bool dhcp_en = true;
+    bool has_dhcp_en = json_get_bool(body, "dhcp_enabled", &dhcp_en);
+    bool lan_changed = false, dhcp_changed = false, wifi_changed = has_dis || ssid[0] || key[0] || enc[0] || chan[0] || ht[0] || country[0] || txp[0];
+
+    if (json_get_str(body, "lan_ip", lan_ip, sizeof(lan_ip)) && lan_ip[0]) {
+        if (!valid_ipv4(lan_ip)) {
+            send_json_hdr(NULL);
+            printf("{\"ok\":false,\"msg\":\"صيغة IP الراوتر غير صحيحة\"}\n");
+            return;
+        }
+        char cur_lan[24] = {0};
+        read_uci_val("network.lan.ipaddr", cur_lan, sizeof(cur_lan));
+        if (strcmp(cur_lan, lan_ip) != 0) {
+            snprintf(cmd, sizeof(cmd), "uci set network.lan.ipaddr='%s'", lan_ip);
+            system(cmd);
+            lan_changed = true;
+        }
+    }
+    if (json_get_str(body, "lan_mask", lan_mask, sizeof(lan_mask)) && lan_mask[0]) {
+        if (!valid_ipv4(lan_mask)) {
+            send_json_hdr(NULL);
+            printf("{\"ok\":false,\"msg\":\"صيغة Netmask غير صحيحة\"}\n");
+            return;
+        }
+        snprintf(cmd, sizeof(cmd), "uci set network.lan.netmask='%s'", lan_mask);
+        system(cmd);
+        lan_changed = true;
+    }
+    if (has_dhcp_en) {
+        snprintf(cmd, sizeof(cmd), "uci set dhcp.lan.ignore='%d'", dhcp_en ? 0 : 1);
+        system(cmd);
+        dhcp_changed = true;
+    }
+    if (json_get_str(body, "dhcp_start", d_start, sizeof(d_start)) && d_start[0]) {
+        int st = atoi(d_start);
+        if (st >= 2 && st <= 254) {
+            snprintf(cmd, sizeof(cmd), "uci set dhcp.lan.start='%d'", st);
+            system(cmd);
+            dhcp_changed = true;
+        }
+    }
+    if (json_get_str(body, "dhcp_limit", d_limit, sizeof(d_limit)) && d_limit[0]) {
+        int lm = atoi(d_limit);
+        if (lm >= 1 && lm <= 250) {
+            snprintf(cmd, sizeof(cmd), "uci set dhcp.lan.limit='%d'", lm);
+            system(cmd);
+            dhcp_changed = true;
+        }
+    }
+    if (json_get_str(body, "dhcp_lease", d_lease, sizeof(d_lease)) && d_lease[0] && safe_uci_str(d_lease)) {
+        snprintf(cmd, sizeof(cmd), "uci set dhcp.lan.leasetime='%s'", d_lease);
+        system(cmd);
+        dhcp_changed = true;
+    }
+    if (json_get_str(body, "dhcp_dns", d_dns, sizeof(d_dns)) && safe_uci_str(d_dns)) {
+        system("uci -q delete dhcp.lan.dhcp_option || true");
+        if (d_dns[0]) {
+            char opt[96] = "6,";
+            size_t p = 2;
+            for (size_t i = 0; d_dns[i] && p + 2 < sizeof(opt); i++) {
+                char c = d_dns[i];
+                if (c == ' ' || c == '\t') {
+                    if (opt[p - 1] != ',') opt[p++] = ',';
+                } else if ((c >= '0' && c <= '9') || c == '.' || c == ',') {
+                    opt[p++] = c;
+                }
+            }
+            if (p > 2 && opt[p - 1] == ',') p--;
+            opt[p] = '\0';
+            if (p > 2) {
+                snprintf(cmd, sizeof(cmd), "uci add_list dhcp.lan.dhcp_option='%s'", opt);
+                system(cmd);
+            }
+        }
+        dhcp_changed = true;
+    }
+
+    if (wifi_changed) {
+        system("uci commit wireless; (sleep 1; wifi reload) >/dev/null 2>&1 &");
+    }
+    if (wan_changed || lan_changed) {
         system("uci commit network; (sleep 1; /etc/init.d/network reload) >/dev/null 2>&1 &");
     }
+    if (dhcp_changed || lan_changed) {
+        system("uci commit dhcp; (sleep 1; /etc/init.d/dnsmasq restart) >/dev/null 2>&1 &");
+    }
     send_json_hdr(NULL);
-    printf("{\"ok\":true}\n");
+    printf("{\"ok\":true,\"lan_changed\":%s,\"lan_ip\":\"%s\"}\n", lan_changed ? "true" : "false", lan_ip);
 }
 
 static void handle_ota_check(const char *body) {
@@ -495,8 +609,8 @@ int main(void) {
         return 0;
     }
 
-    char body[6144] = {0};
-    if (clen > 0 && clen < sizeof(body)) {
+    static char body[16384] = {0};
+    if (clen > 0 && clen < (int)sizeof(body)) {
         size_t got = fread(body, 1, clen, stdin);
         body[got] = '\0';
     }
@@ -634,6 +748,42 @@ int main(void) {
         handle_ota_url(body);
         return 0;
     }
+    if (strcmp(action, "fazakkir_get") == 0) {
+        send_json_hdr(NULL);
+        FILE *fp = fopen("/tmp/rmeter/fazakkir_status.json", "r");
+        if (fp) {
+            char buf[1024];
+            size_t n;
+            bool any = false;
+            while ((n = fread(buf, 1, sizeof(buf), fp)) > 0) {
+                fwrite(buf, 1, n, stdout);
+                any = true;
+            }
+            fclose(fp);
+            if (!any) printf("{\"ok\":false}\n");
+        } else {
+            printf("{\"ok\":false}\n");
+        }
+        return 0;
+    }
+    if (strcmp(action, "fazakkir_save") == 0) {
+        mkdir("/etc/rmeter", 0755);
+        FILE *fp = fopen("/etc/rmeter/fazakkir.json.tmp", "w");
+        if (fp && body[0] == '{') {
+            fputs(body, fp);
+            fclose(fp);
+            rename("/etc/rmeter/fazakkir.json.tmp", "/etc/rmeter/fazakkir.json");
+            char r2[256] = {0};
+            send_ipc("{\"action\":\"fazakkir_reload\"}", r2, sizeof(r2));
+            send_json_hdr(NULL);
+            printf("{\"ok\":true}\n");
+        } else {
+            if (fp) fclose(fp);
+            send_json_hdr(NULL);
+            printf("{\"ok\":false,\"msg\":\"تعذر حفظ ملف الإعدادات\"}\n");
+        }
+        return 0;
+    }
 
     /* Forward all other actions to rmeterd IPC */
     char ipc_req[6400];
@@ -645,7 +795,7 @@ int main(void) {
         snprintf(ipc_req, sizeof(ipc_req), "{\"action\":\"%s\"}", action);
     }
 
-    char resp[512] = {0};
+    char resp[2048] = {0};
     if (send_ipc(ipc_req, resp, sizeof(resp))) {
         send_json_hdr(NULL);
         printf("%s\n", resp);
