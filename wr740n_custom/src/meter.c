@@ -744,17 +744,19 @@ void meter_tick(double dt_sec) {
         /* Re-detect WAN interface & ifindex (handles PPPoE dial-up / reconnect) */
         char cur_wan[32] = {0};
         fw_detect_wan_if(cur_wan, sizeof(cur_wan));
-        if (cur_wan[0] && strcmp(cur_wan, g_wan_if) != 0) {
-            snprintf(g_wan_if, sizeof(g_wan_if), "%s", cur_wan);
-            s_wan_init = false;
-            g_tc_dirty = true;
-        }
         char p_idx[96];
-        snprintf(p_idx, sizeof(p_idx), "/sys/class/net/%s/ifindex", g_wan_if);
+        snprintf(p_idx, sizeof(p_idx), "/sys/class/net/%s/ifindex", cur_wan);
         uint64_t cur_idx = 0;
-        if (read_sys_u64(p_idx, &cur_idx) && cur_idx != s_wan_ifindex) {
-            s_wan_ifindex = cur_idx;
-            g_tc_dirty = true;
+        if (cur_wan[0] && read_sys_u64(p_idx, &cur_idx)) {
+            if (strcmp(cur_wan, g_wan_if) != 0) {
+                snprintf(g_wan_if, sizeof(g_wan_if), "%s", cur_wan);
+                s_wan_init = false;
+                s_wan_ifindex = cur_idx;
+                g_tc_dirty = true;
+            } else if (cur_idx != s_wan_ifindex) {
+                s_wan_ifindex = cur_idx;
+                g_tc_dirty = true;
+            }
         }
         refresh_net_meta();
     }

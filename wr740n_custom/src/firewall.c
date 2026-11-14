@@ -329,7 +329,8 @@ static void apply_dir_htb(rmeter_device_t *devs, int count, const char *ifname,
              ifname, major, major, def_rate, root_wire, def_burst, root_burst, def_q);
     if (run_cmd(cmd) != 0) return;
 
-    snprintf(cmd, sizeof(cmd), "tc qdisc add dev %s parent %d:999 handle 999: fq_codel limit 1000 quantum 300 2>/dev/null || true",
+    snprintf(cmd, sizeof(cmd),
+             "tc qdisc add dev %s parent %d:999 handle 999: fq_codel limit 400 quantum 1514 target 15ms interval 150ms noecn 2>/dev/null || true",
              ifname, major);
     run_cmd(cmd);
 
@@ -367,9 +368,15 @@ static void apply_dir_htb(rmeter_device_t *devs, int count, const char *ifname,
                      ifname, major, cid, major, cid);
         }
         run_cmd(cmd);
-        snprintf(cmd, sizeof(cmd),
-                 "tc qdisc add dev %s parent %d:%x handle %x: fq_codel limit 1000 quantum 300 2>/dev/null || true",
-                 ifname, major, cid, cid);
+        if (ceil_k < 10000U) {
+            snprintf(cmd, sizeof(cmd),
+                     "tc qdisc add dev %s parent %d:%x handle %x: fq_codel limit 300 quantum 1514 target 15ms interval 150ms noecn 2>/dev/null || true",
+                     ifname, major, cid, cid);
+        } else {
+            snprintf(cmd, sizeof(cmd),
+                     "tc qdisc add dev %s parent %d:%x handle %x: fq_codel limit 600 quantum 1514 noecn 2>/dev/null || true",
+                     ifname, major, cid, cid);
+        }
         run_cmd(cmd);
     }
 }
