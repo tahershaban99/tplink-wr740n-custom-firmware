@@ -109,6 +109,15 @@ int meter_find_by_mac_or_ip(const char *id) {
     return meter_find_by_ip(id);
 }
 
+static bool is_ipv4_str(const char *ip) {
+    if (!ip || !ip[0]) return false;
+    unsigned int a = 0, b = 0, c = 0, d = 0;
+    char extra = 0;
+    if (sscanf(ip, "%u.%u.%u.%u%c", &a, &b, &c, &d, &extra) != 4) return false;
+    if (a > 255 || b > 255 || c > 255 || d > 255) return false;
+    return (a | b | c | d) != 0;
+}
+
 static int ensure_device(const char *mac, const char *ip, const char *hostname) {
     char m[18];
     norm_mac(mac, m, sizeof(m));
@@ -126,7 +135,12 @@ static int ensure_device(const char *mac, const char *ip, const char *hostname) 
         g_flash_dirty = true;
     }
 
-    if (ip && ip[0] && strcmp(g_devices[idx].ip, ip) != 0) {
+    if (g_devices[idx].ip[0] && !is_ipv4_str(g_devices[idx].ip)) {
+        g_devices[idx].ip[0] = '\0';
+        g_fw_dirty = true;
+        g_tc_dirty = true;
+    }
+    if (is_ipv4_str(ip) && strcmp(g_devices[idx].ip, ip) != 0) {
         snprintf(g_devices[idx].ip, sizeof(g_devices[idx].ip), "%s", ip);
         g_fw_dirty = true;
         g_tc_dirty = true;
@@ -514,16 +528,16 @@ static void discover_clients(time_t now) {
         fclose(fp);
     }
 
-    /* 2. ip neigh show dev <lan>: only REACHABLE/PERMANENT count as live (ignores STALE AP/wired entries) */
+    /* 2. ip -4 neigh show dev <lan>: IPv4 only, REACHABLE/PERMANENT count as live */
     bool saw_neigh = false;
     char ncmd[96];
-    snprintf(ncmd, sizeof(ncmd), "ip neigh show dev %s 2>/dev/null", g_lan_if);
+    snprintf(ncmd, sizeof(ncmd), "ip -4 neigh show dev %s 2>/dev/null", g_lan_if);
     FILE *nfp = popen(ncmd, "r");
     if (nfp) {
         char line[256];
         while (fgets(line, sizeof(line), nfp)) {
             char ip[32] = {0}, mac[32] = {0}, state[32] = {0};
-            if (sscanf(line, "%31s", ip) != 1) continue;
+            if (sscanf(line, "%31s", ip) != 1 || !is_ipv4_str(ip)) continue;
             char *ll = strstr(line, "lladdr ");
             if (!ll || sscanf(ll + 7, "%31s", mac) != 1 || strlen(mac) != 17 || mac[2] != ':') continue;
             saw_neigh = true;

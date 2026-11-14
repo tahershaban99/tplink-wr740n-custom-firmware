@@ -305,6 +305,7 @@ static void read_wifi_wan_snapshot(wifi_wan_info_t *info) {
 }
 
 static void sync_static_lease_tg(const char *mac, const char *ip, const char *name) {
+    (void)name;
     if (!mac || !mac[0]) return;
     char clean_id[32];
     int j = 0;
@@ -314,18 +315,20 @@ static void sync_static_lease_tg(const char *mac, const char *ip, const char *na
     clean_id[j] = '\0';
 
     char cmd[384];
-    snprintf(cmd, sizeof(cmd), "uci -q delete dhcp.rm_%s 2>/dev/null || true", clean_id);
+    snprintf(cmd, sizeof(cmd),
+             "uci -q delete dhcp.rm_%s 2>/dev/null || true; "
+             "sed -i '/# rm_%s$/d' /etc/dnsmasq.conf 2>/dev/null || true",
+             clean_id, clean_id);
     system(cmd);
     if (ip && ip[0] && safe_tg_uci_str(ip)) {
-        const char *nm = (name && name[0] && safe_tg_uci_str(name)) ? name : "device";
+        /* id:* ignores differing DHCP Client-IDs across dual-boot OSes on the same MAC */
         snprintf(cmd, sizeof(cmd),
-                 "uci set dhcp.rm_%s=host && uci set dhcp.rm_%s.mac='%s' && "
-                 "uci set dhcp.rm_%s.ip='%s' && uci set dhcp.rm_%s.name='%s' && "
-                 "uci commit dhcp && (/etc/init.d/dnsmasq reload >/dev/null 2>&1 &)",
-                 clean_id, clean_id, mac, clean_id, ip, clean_id, nm);
+                 "echo 'dhcp-host=%s,id:*,%s # rm_%s' >> /etc/dnsmasq.conf && "
+                 "uci commit dhcp 2>/dev/null; (/etc/init.d/dnsmasq reload >/dev/null 2>&1 &)",
+                 mac, ip, clean_id);
         system(cmd);
     } else {
-        system("uci commit dhcp 2>/dev/null");
+        system("uci commit dhcp 2>/dev/null; (/etc/init.d/dnsmasq reload >/dev/null 2>&1 &)");
     }
 }
 

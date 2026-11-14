@@ -256,7 +256,7 @@ tr:last-child td{border-bottom:none}
 tr.blocked{opacity:.72}tr.vip{background:var(--pri-soft)}
 .badges{display:flex;gap:3px;flex-wrap:wrap;justify-content:center}
 .bdg{display:inline-flex;align-items:center;gap:3px;padding:1px 5px;border-radius:4px;font-size:calc(10px * var(--fs-k,1));font-weight:600;background:var(--surf-2);border:1px solid var(--brd)}
-.bdg.on{color:var(--ok)}.bdg.off{color:var(--muted)}.bdg.vip{color:var(--vip)}.bdg.blk{color:var(--err)}
+.bdg.on{color:var(--ok)}.bdg.off{color:var(--muted)}.bdg.vip{color:var(--vip)}.bdg.blk{color:var(--err)}.bdg.rand{color:var(--warn)}
 .dur-pill{display:inline-block;min-width:66px;text-align:center;font-size:calc(10.5px * var(--fs-k,1));color:var(--txt);background:var(--bg-sub);border:1px solid var(--brd);padding:1.5px 5px;border-radius:4px;white-space:nowrap}
 .dur-pill.off{color:var(--muted)}
 .ip-main{display:flex;align-items:center;justify-content:center;gap:4px;font-weight:600;font-family:var(--font-mono);font-size:calc(10.5px * var(--fs-k,1))}
@@ -1437,8 +1437,10 @@ function onDevInp(mac,fld,el){
 }
 function onDevKey(e,mac){if(e.key==='Enter'){e.preventDefault();saveRow(mac);}}
 function togPin(mac){openPin[mac]=!openPin[mac];renderDevices(true);}
+function isRandMac(mac){const b=parseInt((mac||'').slice(0,2),16);return !isNaN(b)&&(b&2)!==0;}
 function devBadgesHtml(d){
   return `<span class="bdg ${d.online?'on':'off'}">● ${d.online?'متصل':'غير متصل'}</span>`+
+    (isRandMac(d.mac)?'<span class="bdg rand" title="هذا الجهاز يستخدم عنوان MAC عشوائي — أوقف Randomized/Private MAC من إعدادات الواي فاي في الجهاز ليثبت نفس الاسم والسرعة والـ IP">🎲 ماك عشوائي</span>':'')+
     (d.gaming_mode?'<span class="bdg vip">VIP</span>':'')+
     (d.blocked?`<span class="bdg blk">${d.auto_blocked?'تجاوز الكوتة':'محظور'}</span>`:'');
 }

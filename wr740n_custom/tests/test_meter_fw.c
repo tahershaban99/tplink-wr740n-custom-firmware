@@ -135,10 +135,10 @@ FILE *__wrap_popen(const char *cmd, const char *type) {
         rewind(f);
         return f;
     }
-    if (cmd && (strstr(cmd, "iwinfo") || strstr(cmd, "ip route") || strstr(cmd, "ip neigh"))) {
+    if (cmd && (strstr(cmd, "iwinfo") || strstr(cmd, "ip route") || strstr(cmd, "neigh show"))) {
         FILE *f = tmpfile();
         if (strstr(cmd, "ip route")) fprintf(f, "default via 2.2.2.2 dev eth1\n");
-        else if (strstr(cmd, "ip neigh") && s_mock_neigh) fprintf(f, "%s", s_mock_neigh);
+        else if (strstr(cmd, "neigh show") && s_mock_neigh) fprintf(f, "%s", s_mock_neigh);
         else if (strstr(cmd, "assoclist") && s_mock_iw_assoc) fprintf(f, "%s", s_mock_iw_assoc);
         rewind(f);
         return f;
@@ -324,11 +324,29 @@ static void test_wifi_immediate_disconnect_and_wired_timeout(void) {
     printf("[PASS] test_wifi_immediate_disconnect_and_wired_timeout\n");
 }
 
+static void test_ipv6_neigh_does_not_overwrite_ipv4(void) {
+    meter_init();
+    snprintf(g_wan_if, sizeof(g_wan_if), "eth1");
+    snprintf(g_lan_if, sizeof(g_lan_if), "br-lan");
+
+    /* Repro: ip neigh outputs IPv4 followed by IPv6 link-local (fe80::...) for the same MAC */
+    s_mock_neigh =
+        "5.5.5.10 lladdr e0:24:2f:83:87:00 REACHABLE\n"
+        "fe80::183c:7658 lladdr e0:24:2f:83:87:00 REACHABLE\n";
+    meter_tick(2.0);
+    assert(g_device_count == 1);
+    assert(strcmp(g_devices[0].ip, "5.5.5.10") == 0);
+    s_mock_neigh = NULL;
+
+    printf("[PASS] test_ipv6_neigh_does_not_overwrite_ipv4\n");
+}
+
 int main(void) {
     test_htb_global_and_headroom();
     test_ipt_ip_reuse_and_no_fork_storm();
     test_monotonic_speed_and_dirty_flash();
     test_wifi_immediate_disconnect_and_wired_timeout();
+    test_ipv6_neigh_does_not_overwrite_ipv4();
     printf("ALL test_meter_fw PASSED!\n");
     return 0;
 }
