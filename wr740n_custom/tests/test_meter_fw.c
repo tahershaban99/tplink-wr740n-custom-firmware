@@ -30,6 +30,7 @@ static int s_dl_cnt = 0;
 static char s_ul_ips[16][32];
 static uint64_t s_ul_bytes[16];
 static int s_ul_cnt = 0;
+static const char *s_mock_neigh = NULL;
 
 static bool list_has_ip(char ips[][32], int cnt, const char *ip) {
     for (int i = 0; i < cnt; i++) {
@@ -134,9 +135,10 @@ FILE *__wrap_popen(const char *cmd, const char *type) {
         rewind(f);
         return f;
     }
-    if (cmd && (strstr(cmd, "iwinfo") || strstr(cmd, "ip route"))) {
+    if (cmd && (strstr(cmd, "iwinfo") || strstr(cmd, "ip route") || strstr(cmd, "ip neigh"))) {
         FILE *f = tmpfile();
         if (strstr(cmd, "ip route")) fprintf(f, "default via 2.2.2.2 dev eth1\n");
+        else if (strstr(cmd, "ip neigh") && s_mock_neigh) fprintf(f, "%s", s_mock_neigh);
         else if (strstr(cmd, "assoclist") && s_mock_iw_assoc) fprintf(f, "%s", s_mock_iw_assoc);
         rewind(f);
         return f;
@@ -307,6 +309,18 @@ static void test_wifi_immediate_disconnect_and_wired_timeout(void) {
     g_devices[0].last_seen = time(NULL) - 11;
     meter_tick(2.0);
     assert(g_devices[0].online == false);
+
+    /* AP/wired device: REACHABLE keeps online, STALE does not refresh last_seen */
+    s_mock_neigh = "192.168.1.60 lladdr aa:bb:cc:dd:ee:22 REACHABLE\n";
+    meter_tick(2.0);
+    assert(g_devices[0].online == true);
+
+    s_mock_neigh = "192.168.1.60 lladdr aa:bb:cc:dd:ee:22 STALE\n";
+    g_devices[0].last_seen = time(NULL) - 11;
+    meter_tick(2.0);
+    assert(g_devices[0].online == false);
+    s_mock_neigh = NULL;
+
     printf("[PASS] test_wifi_immediate_disconnect_and_wired_timeout\n");
 }
 

@@ -17,6 +17,7 @@
 #define TG_USERS_JSON  "/tmp/rmeter/tg_users.json"
 #define AUTH_CONF      "/etc/rmeter/auth.conf"
 #define SESSION_TOK    "/tmp/rmeter/session.tok"
+#define MAX_SESSIONS   4
 #define TG_CA_FILE     "/etc/rmeter/tg_ca.pem"
 
 static void send_json_hdr(const char *extra_hdr) {
@@ -95,33 +96,68 @@ static void gen_token(char *out, size_t sz) {
     }
 }
 
-static bool check_auth(void) {
-    char expected[64] = {0};
-    FILE *fp = fopen(SESSION_TOK, "r");
-    if (!fp) return false;
-    if (!fgets(expected, sizeof(expected), fp)) { fclose(fp); return false; }
-    fclose(fp);
-    char *nl = strpbrk(expected, "\r\n");
-    if (nl) *nl = '\0';
-    if (strlen(expected) < 16) return false;
-
+static bool extract_req_token(char *got, size_t gsz) {
+    if (!got || gsz == 0) return false;
+    got[0] = '\0';
     const char *hdr_tok = getenv("HTTP_X_AUTH_TOKEN");
-    if (hdr_tok && strcmp(hdr_tok, expected) == 0) return true;
-
+    if (hdr_tok && strlen(hdr_tok) >= 16) {
+        snprintf(got, gsz, "%s", hdr_tok);
+        return true;
+    }
     const char *cookie = getenv("HTTP_COOKIE");
     if (cookie) {
         const char *p = strstr(cookie, "rmeter_tok=");
         if (p) {
             p += 11;
-            char got[64] = {0};
             size_t i = 0;
-            while (p[i] && p[i] != ';' && !isspace((unsigned char)p[i]) && i + 1 < sizeof(got)) {
+            while (p[i] && p[i] != ';' && !isspace((unsigned char)p[i]) && i + 1 < gsz) {
                 got[i] = p[i];
                 i++;
             }
             got[i] = '\0';
-            if (strcmp(got, expected) == 0) return true;
+            if (strlen(got) >= 16) return true;
         }
+    }
+    return false;
+}
+
+static int load_session_tokens(char toks[MAX_SESSIONS][64]) {
+    int cnt = 0;
+    FILE *fp = fopen(SESSION_TOK, "r");
+    if (!fp) return 0;
+    char line[64];
+    while (cnt < MAX_SESSIONS && fgets(line, sizeof(line), fp)) {
+        char *nl = strpbrk(line, "\r\n");
+        if (nl) *nl = '\0';
+        if (strlen(line) >= 16) {
+            snprintf(toks[cnt++], 64, "%s", line);
+        }
+    }
+    fclose(fp);
+    return cnt;
+}
+
+static void save_session_tokens(char toks[][64], int cnt) {
+    mkdir("/tmp/rmeter", 0755);
+    char tmp[96];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", SESSION_TOK);
+    FILE *fp = fopen(tmp, "w");
+    if (fp) {
+        for (int i = 0; i < cnt; i++) {
+            fprintf(fp, "%s\n", toks[i]);
+        }
+        fclose(fp);
+        rename(tmp, SESSION_TOK);
+    }
+}
+
+static bool check_auth(void) {
+    char got[64] = {0};
+    if (!extract_req_token(got, sizeof(got))) return false;
+    char toks[MAX_SESSIONS][64];
+    int cnt = load_session_tokens(toks);
+    for (int i = 0; i < cnt; i++) {
+        if (strcmp(got, toks[i]) == 0) return true;
     }
     return false;
 }
@@ -635,9 +671,16 @@ int main(void) {
         if (strcmp(req_u, cfg_u) == 0 && strcmp(req_p, cfg_p) == 0) {
             char tok[40] = {0};
             gen_token(tok, sizeof(tok));
-            mkdir("/tmp/rmeter", 0755);
-            FILE *fp = fopen(SESSION_TOK, "w");
-            if (fp) { fprintf(fp, "%s\n", tok); fclose(fp); }
+            char toks[MAX_SESSIONS][64];
+            int cnt = load_session_tokens(toks);
+            if (cnt >= MAX_SESSIONS) {
+                for (int i = 1; i < MAX_SESSIONS; i++) {
+                    snprintf(toks[i - 1], 64, "%s", toks[i]);
+                }
+                cnt = MAX_SESSIONS - 1;
+            }
+            snprintf(toks[cnt++], 64, "%s", tok);
+            save_session_tokens(toks, cnt);
             char hdr[160];
             snprintf(hdr, sizeof(hdr), "Set-Cookie: rmeter_tok=%s; Path=/; HttpOnly\r\n", tok);
             send_json_hdr(hdr);
@@ -650,7 +693,22 @@ int main(void) {
     }
 
     if (strcmp(action, "logout") == 0) {
-        unlink(SESSION_TOK);
+        char got[64] = {0};
+        if (extract_req_token(got, sizeof(got))) {
+            char toks[MAX_SESSIONS][64];
+            int cnt = load_session_tokens(toks);
+            int ncnt = 0;
+            for (int i = 0; i < cnt; i++) {
+                if (strcmp(toks[i], got) != 0) {
+                    if (ncnt != i) snprintf(toks[ncnt], 64, "%s", toks[i]);
+                    ncnt++;
+                }
+            }
+            if (ncnt > 0) save_session_tokens(toks, ncnt);
+            else unlink(SESSION_TOK);
+        } else {
+            unlink(SESSION_TOK);
+        }
         send_json_hdr("Set-Cookie: rmeter_tok=; Path=/; Max-Age=0\r\n");
         printf("{\"ok\":true}\n");
         return 0;

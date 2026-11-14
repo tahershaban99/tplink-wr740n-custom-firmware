@@ -494,6 +494,7 @@ static bool read_sys_u64(const char *path, uint64_t *out) {
 
 static bool s_iw_ok = false;
 static bool s_wifi_seen[RMETER_MAX_DEVICES];
+static time_t s_last_arp_probe[RMETER_MAX_DEVICES];
 
 static void discover_clients(time_t now) {
     s_iw_ok = false;
@@ -513,26 +514,56 @@ static void discover_clients(time_t now) {
         fclose(fp);
     }
 
-    /* 2. /proc/net/arp: ip hw_type flags mac mask dev */
-    fp = fopen("/proc/net/arp", "r");
-    if (fp) {
+    /* 2. ip neigh show dev <lan>: only REACHABLE/PERMANENT count as live (ignores STALE AP/wired entries) */
+    bool saw_neigh = false;
+    char ncmd[96];
+    snprintf(ncmd, sizeof(ncmd), "ip neigh show dev %s 2>/dev/null", g_lan_if);
+    FILE *nfp = popen(ncmd, "r");
+    if (nfp) {
         char line[256];
-        if (!fgets(line, sizeof(line), fp)) { fclose(fp); fp = NULL; } /* skip header */
-        while (fp && fgets(line, sizeof(line), fp)) {
-            char ip[32] = {0}, hw[16] = {0}, flags[16] = {0}, mac[32] = {0}, mask[16] = {0}, dev[32] = {0};
-            if (sscanf(line, "%31s %15s %15s %31s %15s %31s", ip, hw, flags, mac, mask, dev) == 6) {
-                if (strcmp(dev, g_lan_if) == 0 && strcmp(flags, "0x0") != 0) {
-                    int idx = ensure_device(mac, ip, NULL);
-                    if (idx >= 0) {
-                        if (!g_devices[idx].is_wifi) {
+        while (fgets(line, sizeof(line), nfp)) {
+            char ip[32] = {0}, mac[32] = {0}, state[32] = {0};
+            if (sscanf(line, "%31s", ip) != 1) continue;
+            char *ll = strstr(line, "lladdr ");
+            if (!ll || sscanf(ll + 7, "%31s", mac) != 1 || strlen(mac) != 17 || mac[2] != ':') continue;
+            saw_neigh = true;
+            char *tok = strrchr(line, ' ');
+            while (tok && (tok[1] == '\0' || tok[1] == '\n' || tok[1] == '\r')) {
+                *tok = '\0';
+                tok = strrchr(line, ' ');
+            }
+            if (tok) sscanf(tok + 1, "%31s", state);
+            int idx = ensure_device(mac, ip, NULL);
+            if (idx >= 0 && !g_devices[idx].is_wifi) {
+                if (strcmp(state, "REACHABLE") == 0 || strcmp(state, "PERMANENT") == 0) {
+                    if (!g_devices[idx].online || g_devices[idx].connected_at == 0) g_devices[idx].connected_at = now;
+                    g_devices[idx].last_seen = now;
+                }
+            }
+        }
+        pclose(nfp);
+    }
+
+    /* Fallback to /proc/net/arp only if ip neigh produced no entries */
+    if (!saw_neigh) {
+        fp = fopen("/proc/net/arp", "r");
+        if (fp) {
+            char line[256];
+            if (!fgets(line, sizeof(line), fp)) { fclose(fp); fp = NULL; } /* skip header */
+            while (fp && fgets(line, sizeof(line), fp)) {
+                char ip[32] = {0}, hw[16] = {0}, flags[16] = {0}, mac[32] = {0}, mask[16] = {0}, dev[32] = {0};
+                if (sscanf(line, "%31s %15s %15s %31s %15s %31s", ip, hw, flags, mac, mask, dev) == 6) {
+                    if (strcmp(dev, g_lan_if) == 0 && strcmp(flags, "0x0") != 0) {
+                        int idx = ensure_device(mac, ip, NULL);
+                        if (idx >= 0 && !g_devices[idx].is_wifi) {
                             if (!g_devices[idx].online || g_devices[idx].connected_at == 0) g_devices[idx].connected_at = now;
                             g_devices[idx].last_seen = now;
                         }
                     }
                 }
             }
+            if (fp) fclose(fp);
         }
-        fclose(fp);
     }
 
     /* 3. iwinfo assoclist for active Wi-Fi clients */
@@ -642,6 +673,13 @@ void meter_tick(double dt_sec) {
         if (g_devices[i].is_wifi && s_iw_ok) {
             g_devices[i].online = s_wifi_seen[i];
         } else {
+            if (g_devices[i].online && g_devices[i].ip[0] &&
+                (now - g_devices[i].last_seen) >= 6 && (now - s_last_arp_probe[i]) >= 6) {
+                s_last_arp_probe[i] = now;
+                char pcmd[96];
+                snprintf(pcmd, sizeof(pcmd), "ping -c 1 -W 1 %s >/dev/null 2>&1 &", g_devices[i].ip);
+                if (system(pcmd) != 0) {}
+            }
             g_devices[i].online = (g_devices[i].last_seen > 0 && (now - g_devices[i].last_seen) <= 10);
         }
         if (!g_devices[i].online) {
