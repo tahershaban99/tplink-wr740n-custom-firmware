@@ -386,6 +386,14 @@ canvas{width:100%;display:block;border-radius:var(--r-sm);background:var(--bg-su
       المراقبة والتحديث OTA
     </button>
     <div class="side-foot">
+      <div class="uptime-box" id="sbPrayerBox" onclick="goTab('fazakkir')" style="cursor:pointer;margin-bottom:8px;transition:.2s border-color">
+        <div class="uptime-lbl"><span>🕌 الصلاة القادمة</span><span id="sbPrayerBadge" style="font-size:10px;padding:1px 6px;border-radius:99px;background:rgba(16,185,129,.12);color:var(--ok)">-</span></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:6px;margin-top:4px">
+          <strong id="sbPrayerName" style="font-size:13px;color:var(--text)">-</strong>
+          <span class="code" id="sbPrayerTime" style="font-size:12px;color:var(--pri);font-weight:700">--:--</span>
+        </div>
+        <div id="sbPrayerRem" style="font-size:11px;color:var(--muted);margin-top:3px">جاري التحديث...</div>
+      </div>
       <div class="uptime-box">
         <div class="uptime-lbl"><span>مدة تشغيل الجهاز</span><span class="dot"></span></div>
         <div class="uptime-grid num">
@@ -521,8 +529,10 @@ canvas{width:100%;display:block;border-radius:var(--r-sm);background:var(--bg-su
             <button class="btn sm warn" onclick="goTab('tg')">🤖 تليجرام</button>
           </div>
         </div>
-        <div class="kv-list" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
-          <div class="kv"><small>منفذ الإنترنت (WAN)</small><strong id="ovWanIf">WAN</strong> <span style="font-size:11px;color:var(--muted)" id="ovWanState">-</span></div>
+        <div class="kv-list" style="grid-template-columns:repeat(auto-fit,minmax(175px,1fr))">
+          <div class="kv"><small>نوع ومنفذ الاتصال (WAN)</small><strong id="ovWanIf">WAN</strong> <span style="font-size:11px;color:var(--muted)" id="ovWanState">-</span></div>
+          <div class="kv"><small>عنوان الإنترنت (WAN IP)</small><strong class="code" id="ovWanIp">-</strong> <span style="font-size:11px;color:var(--muted)" id="ovWanGw">GW: -</span></div>
+          <div class="kv"><small>عنوان الراوتر (LAN IP)</small><strong class="code" id="ovLanIp">192.168.1.1</strong></div>
           <div class="kv"><small>الأجهزة المتصلة (LAN)</small><strong id="ovLanCnt">0 متصل</strong></div>
           <div class="kv"><small>حالة الوايفاي</small><strong id="ovWifiInfo">Wi-Fi • 2.4GHz</strong></div>
           <div class="kv"><small>ساعة الراوتر</small><strong class="code" id="ovClock">-</strong></div>
@@ -1177,6 +1187,27 @@ function render(){
   if($('upHrs')) $('upHrs').textContent=Math.floor((ups%86400)/3600);
   if($('upMins')) $('upMins').textContent=Math.floor((ups%3600)/60);
   if($('sideClock')) $('sideClock').textContent=S.router_time||'-';
+  if($('sbPrayerBox')){
+    const pn=S.next_prayer_name||'', pt=S.next_prayer_time||'', pr=(S.next_prayer_rem_min!==undefined?S.next_prayer_rem_min:-1);
+    if(pn && pr>=0){
+      const ph=Math.floor(pr/60), pm=pr%60;
+      const rTxt=ph>0?(ph+' س '+(pm>0?pm+' د':'')):(pm+' دقيقة');
+      const soon=(pr<=15);
+      $('sbPrayerName').textContent='صلاة '+pn;
+      $('sbPrayerTime').textContent=pt;
+      $('sbPrayerRem').textContent='المتبقي: '+rTxt;
+      $('sbPrayerRem').style.color=soon?'var(--warn)':'var(--muted)';
+      $('sbPrayerBox').style.borderColor=soon?'var(--warn)':'';
+      $('sbPrayerBadge').textContent=soon?'قريباً!':'تنبيه';
+      $('sbPrayerBadge').style.background=soon?'rgba(245,158,11,.18)':'rgba(16,185,129,.12)';
+      $('sbPrayerBadge').style.color=soon?'var(--warn)':'var(--ok)';
+    }else{
+      $('sbPrayerName').textContent='غير متاح';
+      $('sbPrayerTime').textContent='--:--';
+      $('sbPrayerRem').textContent='اضغط لضبط المواقيت';
+      $('sbPrayerBadge').textContent='فذكر';
+    }
+  }
 
   if(S.reboot_countdown_s>=0){
     $('rebootBanner').style.display='block';
@@ -1274,8 +1305,18 @@ function drawCanvasChart(cid){
 function updateOverview(td, tu, used, mq, onlineCnt){
   if(!$('tab-ov'))return;
   const totDev=S.devices.length||0;
-  $('ovWanIf').textContent=(S.wan_if||'WAN').toUpperCase();
+  const proto=(S.wan_proto||'dhcp').toUpperCase();
+  const isPpp=(S.wan_proto==='pppoe'||S.pppoe_up||(S.wan_if||'').startsWith('pppoe'));
+  if(isPpp){
+    $('ovWanIf').innerHTML='<span style="color:'+(S.pppoe_up?'var(--ok)':'var(--warn)')+'">PPPoE '+(S.pppoe_up?'● متصل':'○ غير متصل')+'</span> <span class="code" style="font-size:11px;color:var(--muted)">('+(S.wan_if||'pppoe-wan')+')</span>';
+  }else{
+    $('ovWanIf').textContent=proto+' • '+(S.wan_if||'WAN').toUpperCase();
+  }
   $('ovWanState').textContent=(td+tu>0)?'• حركة بيانات نشطة':'• متصل وجاهز';
+  $('ovWanIp').textContent=S.wan_ip||'غير متصل';
+  $('ovWanIp').style.color=S.wan_ip?'var(--ok)':'var(--warn)';
+  $('ovWanGw').textContent=S.wan_gw?('GW: '+S.wan_gw):'GW: -';
+  $('ovLanIp').textContent=S.lan_ip||'192.168.1.1';
   $('ovLanCnt').textContent=onlineCnt+' متصل / '+totDev;
   $('ovWifiInfo').textContent=S.wifi_disabled?'الوايفاي معطّل':((S.wifi_ssid||'Wi-Fi')+' • '+(S.wifi_clients||0)+' لاسلكي');
 

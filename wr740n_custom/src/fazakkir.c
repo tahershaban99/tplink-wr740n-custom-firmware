@@ -743,3 +743,82 @@ void fazakkir_tick(time_t now) {
     }
 }
 
+static int calc_prayer_target_min(int idx) {
+    if (idx < 0 || idx >= 5) return -1;
+    int hh = -1, mm = -1;
+    if (sscanf(g_fazakkir.prayer_times[idx], "%d:%d", &hh, &mm) != 2) return -1;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return -1;
+    int t = hh * 60 + mm + g_fazakkir.prayer_offset[idx];
+    while (t < 0) t += 1440;
+    while (t >= 1440) t -= 1440;
+    return t;
+}
+
+bool fazakkir_get_next_prayer(time_t now, char *name_out, size_t nsz,
+                              char *time_out, size_t tsz, int *rem_min_out) {
+    if (name_out && nsz) name_out[0] = '\0';
+    if (time_out && tsz) time_out[0] = '\0';
+    if (rem_min_out) *rem_min_out = -1;
+
+    time_t local_t = now + (time_t)g_config.auto_reboot_tz * 3600;
+    struct tm tm_val;
+    if (!gmtime_r(&local_t, &tm_val) || tm_val.tm_year + 1900 < 2024) return false;
+    int now_min = tm_val.tm_hour * 60 + tm_val.tm_min;
+
+    int first_idx = -1, first_min = -1;
+    int next_idx = -1, next_min = -1;
+
+    for (int i = 0; i < 5; i++) {
+        if (!g_fazakkir.prayer_on[i]) continue;
+        int t = calc_prayer_target_min(i);
+        if (t < 0) continue;
+        if (first_idx < 0 || t < first_min) {
+            first_idx = i;
+            first_min = t;
+        }
+        if (t >= now_min && (next_idx < 0 || t < next_min)) {
+            next_idx = i;
+            next_min = t;
+        }
+    }
+
+    int chosen_idx = -1, chosen_min = -1, rem = -1;
+    if (next_idx >= 0) {
+        chosen_idx = next_idx;
+        chosen_min = next_min;
+        rem = next_min - now_min;
+    } else if (first_idx >= 0) {
+        chosen_idx = first_idx;
+        chosen_min = first_min;
+        rem = (1440 - now_min) + first_min;
+    } else {
+        return false;
+    }
+
+    if (name_out && nsz) snprintf(name_out, nsz, "%s", PRAYER_AR[chosen_idx]);
+    if (time_out && tsz) snprintf(time_out, tsz, "%02d:%02d", chosen_min / 60, chosen_min % 60);
+    if (rem_min_out) *rem_min_out = rem;
+    return true;
+}
+
+void fazakkir_format_today_prayers(char *out, size_t sz) {
+    if (!out || sz == 0) return;
+    size_t pos = 0;
+    pos += (size_t)snprintf(out + pos, sz - pos,
+                            "📅 <b>مواقيت الصلاة اليوم</b> (%s، %s)\n\n",
+                            g_fazakkir.city[0] ? g_fazakkir.city : "Cairo",
+                            g_fazakkir.prayer_date[0] ? g_fazakkir.prayer_date : "-");
+    for (int i = 0; i < 5 && pos + 64 < sz; i++) {
+        int t = calc_prayer_target_min(i);
+        if (t >= 0) {
+            pos += (size_t)snprintf(out + pos, sz - pos,
+                                    "• <b>%s:</b> <code>%02d:%02d</code>%s\n",
+                                    PRAYER_AR[i], t / 60, t % 60,
+                                    g_fazakkir.prayer_on[i] ? "" : " (معطّل)");
+        } else {
+            pos += (size_t)snprintf(out + pos, sz - pos,
+                                    "• <b>%s:</b> <code>--:--</code>\n", PRAYER_AR[i]);
+        }
+    }
+}
+

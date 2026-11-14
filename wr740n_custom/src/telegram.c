@@ -2,6 +2,7 @@
 #include "telegram.h"
 #include "meter.h"
 #include "json_util.h"
+#include "fazakkir.h"
 
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -47,13 +48,14 @@ static const char *TG_ADMIN_KEYBOARD =
     "[{\"text\":\"🏠 القائمة الرئيسية\"},{\"text\":\"👥 الأجهزة المتصلة\"}],"
     "[{\"text\":\"📊 استهلاك الباقة\"},{\"text\":\"⚡ فحص السرعة\"}],"
     "[{\"text\":\"⚙️ حالة الراوتر\"},{\"text\":\"📡 الوايفاي والشبكة\"}],"
-    "[{\"text\":\"🔄 إعادة التشغيل\"},{\"text\":\"🚀 فحص التحديثات\"}]"
+    "[{\"text\":\"🕌 الصلاة القادمة\"},{\"text\":\"🚀 فحص التحديثات\"}],"
+    "[{\"text\":\"🔄 إعادة التشغيل\"}]"
     "],\"resize_keyboard\":true}";
 
 static const char *TG_USER_KEYBOARD =
     "{\"keyboard\":["
     "[{\"text\":\"📊 استهلاكي\"},{\"text\":\"⚡ سرعتي\"}],"
-    "[{\"text\":\"📋 مساعدة\"}]"
+    "[{\"text\":\"🕌 الصلاة القادمة\"},{\"text\":\"📋 مساعدة\"}]"
     "],\"resize_keyboard\":true}";
 
 typedef struct {
@@ -1666,7 +1668,8 @@ static void send_admin_home_menu(const char *chat_id, int64_t edit_msg_id) {
              "[{\"text\":\"⚙️ النظام والأدوات\",\"callback_data\":\"adm_status\"},"
              "{\"text\":\"🔄 إعادة التشغيل\",\"callback_data\":\"adm_reboot\"}],"
              "[{\"text\":\"🚀 تحديث OTA\",\"callback_data\":\"adm_ota\"},"
-             "{\"text\":\"🔄 تحديث اللوحة\",\"callback_data\":\"adm_home\"}]"
+             "{\"text\":\"🕌 الصلاة القادمة\",\"callback_data\":\"adm_prayer\"}],"
+             "[{\"text\":\"🔄 تحديث اللوحة\",\"callback_data\":\"adm_home\"}]"
              "]}", on_cnt);
 
     tg_edit_or_send(chat_id, edit_msg_id, msg, kb);
@@ -2634,6 +2637,55 @@ static void handle_pending_input(const char *chat_id, pend_kind_t kind, const ch
     }
 }
 
+static void send_prayer_info(const char *chat_id, int64_t edit_msg_id, bool is_admin, bool show_all) {
+    char msg[1024] = {0};
+    char kb[512] = {0};
+    char np_name[32] = {0}, np_time[12] = {0};
+    int rem = -1;
+    bool ok = fazakkir_get_next_prayer(time(NULL), np_name, sizeof(np_name), np_time, sizeof(np_time), &rem);
+
+    char rem_str[64] = {0};
+    if (ok && rem >= 0) {
+        int hrs = rem / 60, mins = rem % 60;
+        if (hrs > 0 && mins > 0) snprintf(rem_str, sizeof(rem_str), "%d ساعة و %d دقيقة", hrs, mins);
+        else if (hrs > 0) snprintf(rem_str, sizeof(rem_str), "%d ساعة", hrs);
+        else snprintf(rem_str, sizeof(rem_str), "%d دقيقة", mins);
+    }
+
+    if (show_all) {
+        fazakkir_format_today_prayers(msg, sizeof(msg));
+        if (ok) {
+            size_t len = strlen(msg);
+            snprintf(msg + len, sizeof(msg) - len,
+                     "\n🕌 <b>الصلاة القادمة:</b> صلاة <b>%s</b> (%s)\n⏳ المتبقي: <b>%s</b>",
+                     np_name, np_time, rem_str);
+        }
+        snprintf(kb, sizeof(kb),
+                 "{\"inline_keyboard\":[[{\"text\":\"🕌 الصلاة القادمة\",\"callback_data\":\"prayer_next\"}%s]]}",
+                 is_admin ? ",{\"text\":\"🏠 الرئيسية\",\"callback_data\":\"adm_home\"}" : "");
+    } else {
+        if (ok) {
+            snprintf(msg, sizeof(msg),
+                     "🕌 <b>الصلاة القادمة: صلاة %s</b>\n"
+                     "⏰ الموعد: <code>%s</code> (%s)\n"
+                     "⏳ المتبقي عليها: <b>%s</b>",
+                     np_name, np_time,
+                     g_fazakkir.city[0] ? g_fazakkir.city : "Cairo",
+                     rem_str);
+        } else {
+            snprintf(msg, sizeof(msg),
+                     "⚠️ تعذر تحديد الصلاة القادمة حالياً.\n"
+                     "تأكد من تزامن ساعة الراوتر وتحديث مواقيت الصلاة من تبويب <b>فذكر</b>.");
+        }
+        snprintf(kb, sizeof(kb),
+                 "{\"inline_keyboard\":["
+                 "[{\"text\":\"📅 مواقيت اليوم كلها\",\"callback_data\":\"prayer_all\"},"
+                 "{\"text\":\"🔄 تحديث\",\"callback_data\":\"prayer_next\"}]%s]}",
+                 is_admin ? ",[{\"text\":\"🏠 الرئيسية\",\"callback_data\":\"adm_home\"}]" : "");
+    }
+    tg_edit_or_send(chat_id, edit_msg_id, msg, kb);
+}
+
 static void handle_command(const char *chat_id, const char *text) {
     bool is_adm = tg_is_admin(chat_id);
     char cmd[64] = {0}, arg1[64] = {0}, arg2[64] = {0}, arg3[64] = {0};
@@ -2646,6 +2698,8 @@ static void handle_command(const char *chat_id, const char *text) {
     if (!is_adm) {
         if (strstr(text, "استهلاك") || strstr(text, "سرع") || strcmp(cmd, "/quota") == 0 || strcmp(cmd, "/speed") == 0) {
             send_normal_user_report(chat_id);
+        } else if (strstr(text, "الصلاة") || strstr(text, "صلاه") || strcmp(cmd, "/prayer") == 0) {
+            send_prayer_info(chat_id, 0, false, false);
         } else if (strcmp(cmd, "/id") == 0) {
             char msg[192];
             snprintf(msg, sizeof(msg), "🆔 معرف التليجرام الخاص بك:\n<code>%s</code>", chat_id);
@@ -2713,6 +2767,8 @@ static void handle_command(const char *chat_id, const char *text) {
         send_admin_reboot_menu(chat_id, 0);
     } else if (strcmp(cmd, "/ota") == 0 || strcmp(cmd, "/update") == 0 || strstr(text, "فحص التحديثات")) {
         send_admin_ota_menu(chat_id, 0);
+    } else if (strcmp(cmd, "/prayer") == 0 || strstr(text, "الصلاة") || strstr(text, "صلاه")) {
+        send_prayer_info(chat_id, 0, true, false);
     } else if (strcmp(cmd, "/reboot_time") == 0) {
         handle_pending_input(chat_id, PEND_REBOOT_TIME, "", arg1);
     } else if (strcmp(cmd, "/block") == 0 || strcmp(cmd, "حظر") == 0) {
@@ -2816,6 +2872,8 @@ static bool handle_callback_admin(const char *cb_id, const char *chat_id, int64_
         send_admin_reboot_menu(chat_id, msg_id);
     } else if (strcmp(data, "adm_ota") == 0) {
         send_admin_ota_menu(chat_id, msg_id);
+    } else if (strcmp(data, "adm_prayer") == 0) {
+        send_prayer_info(chat_id, msg_id, true, false);
     } else if (strncmp(data, "mdev:", 5) == 0 || strncmp(data, "dev:", 4) == 0) {
         pend_clear(chat_id);
         const char *mac = (data[0] == 'm') ? (data + 5) : (data + 4);
@@ -3133,7 +3191,18 @@ static bool handle_callback_admin(const char *cb_id, const char *chat_id, int64_
 
 static void handle_callback(const char *cb_id, const char *chat_id, int64_t msg_id, const char *data) {
     bool acked = false;
-    if (tg_is_admin(chat_id)) {
+    bool is_adm = tg_is_admin(chat_id);
+    if (strcmp(data, "prayer_next") == 0) {
+        send_prayer_info(chat_id, msg_id, is_adm, false);
+        tg_answer_callback_sync(cb_id, "🕌 تم تحديث وقت الصلاة القادمة");
+        return;
+    }
+    if (strcmp(data, "prayer_all") == 0) {
+        send_prayer_info(chat_id, msg_id, is_adm, true);
+        tg_answer_callback_sync(cb_id, "📅 مواقيت الصلاة اليوم");
+        return;
+    }
+    if (is_adm) {
         acked = handle_callback_admin(cb_id, chat_id, msg_id, data);
     }
     if (!acked) tg_answer_callback_sync(cb_id, NULL);

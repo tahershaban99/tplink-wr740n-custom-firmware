@@ -8,18 +8,18 @@ STAGE=/tmp/rmeter_rootfs
 
 echo "=== 1. Running Host Unit Tests ==="
 gcc -O2 -Wall -Wextra -std=gnu99 -I"$PROJ/src" \
-  "$PROJ/tests/test_unit.c" "$PROJ/src/meter.c" "$PROJ/src/json_util.c" \
+  "$PROJ/tests/test_unit.c" "$PROJ/src/meter.c" "$PROJ/src/fazakkir.c" "$PROJ/src/json_util.c" \
   -lpthread -o /tmp/test_unit
 /tmp/test_unit
 
 gcc -O2 -Wall -Wextra -std=gnu99 -I"$PROJ/src" \
-  "$PROJ/tests/test_telegram.c" "$PROJ/src/meter.c" "$PROJ/src/json_util.c" \
+  "$PROJ/tests/test_telegram.c" "$PROJ/src/meter.c" "$PROJ/src/fazakkir.c" "$PROJ/src/json_util.c" \
   -lpthread -o /tmp/test_telegram
 /tmp/test_telegram
 
 gcc -O2 -Wall -Wextra -std=gnu99 -I"$PROJ/src" \
   -Wl,--wrap=system -Wl,--wrap=popen -Wl,--wrap=pclose -Wl,--wrap=fopen \
-  "$PROJ/tests/test_meter_fw.c" "$PROJ/src/firewall.c" "$PROJ/src/meter.c" "$PROJ/src/json_util.c" \
+  "$PROJ/tests/test_meter_fw.c" "$PROJ/src/firewall.c" "$PROJ/src/meter.c" "$PROJ/src/fazakkir.c" "$PROJ/src/json_util.c" \
   -lpthread -o /tmp/test_meter_fw
 /tmp/test_meter_fw
 

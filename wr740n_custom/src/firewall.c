@@ -58,14 +58,17 @@ void fw_init(void) {
     run_cmd("iptables -C FORWARD -j RMETER_DL  2>/dev/null || iptables -I FORWARD 2 -j RMETER_DL");
     run_cmd("iptables -C FORWARD -j RMETER_UL  2>/dev/null || iptables -I FORWARD 3 -j RMETER_UL");
 
-    /* Optional mangle VIP DSCP chain */
+    /* Optional mangle VIP DSCP & Upload MARK chains */
     run_cmd("iptables -t mangle -N RMETER_VIP 2>/dev/null || iptables -t mangle -F RMETER_VIP 2>/dev/null");
     run_cmd("iptables -t mangle -C FORWARD -j RMETER_VIP 2>/dev/null || iptables -t mangle -I FORWARD 1 -j RMETER_VIP 2>/dev/null");
+    run_cmd("iptables -t mangle -N RMETER_MARK 2>/dev/null || true");
+    run_cmd("iptables -t mangle -C FORWARD -j RMETER_MARK 2>/dev/null || iptables -t mangle -A FORWARD -j RMETER_MARK 2>/dev/null");
 }
 
 bool fw_check_hooks(void) {
     if (run_cmd("iptables -C FORWARD -j RMETER_BLK 2>/dev/null") != 0 ||
-        run_cmd("iptables -t mangle -C FORWARD -j RMETER_VIP 2>/dev/null") != 0) {
+        run_cmd("iptables -t mangle -C FORWARD -j RMETER_VIP 2>/dev/null") != 0 ||
+        run_cmd("iptables -t mangle -C FORWARD -j RMETER_MARK 2>/dev/null") != 0) {
         fw_init();
         return true;
     }

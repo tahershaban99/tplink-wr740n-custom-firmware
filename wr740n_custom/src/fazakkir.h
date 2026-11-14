@@ -63,6 +63,9 @@ bool fazakkir_autolocate(char *city_out, size_t csz, char *country_out, size_t r
 bool fazakkir_fetch_zikr(bool add_card, char *out_text, size_t out_sz,
                          char *err, size_t err_sz);
 bool fazakkir_send_test(int kind, char *err, size_t err_sz);
+bool fazakkir_get_next_prayer(time_t now, char *name_out, size_t nsz,
+                              char *time_out, size_t tsz, int *rem_min_out);
+void fazakkir_format_today_prayers(char *out, size_t sz);
 
 #endif
 

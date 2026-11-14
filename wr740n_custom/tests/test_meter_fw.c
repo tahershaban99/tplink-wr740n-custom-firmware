@@ -11,6 +11,11 @@
 #include "../src/meter.h"
 #include "../src/firewall.h"
 
+bool telegram_send_message(const char *chat_id, const char *text, const char *kb) {
+    (void)chat_id; (void)text; (void)kb;
+    return true;
+}
+
 extern int __real_system(const char *cmd);
 extern FILE *__real_popen(const char *cmd, const char *type);
 

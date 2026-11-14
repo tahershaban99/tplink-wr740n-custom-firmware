@@ -7,7 +7,11 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Stub firewall functions for unit testing meter logic in memory */
+/* Stub firewall & telegram functions for unit testing meter logic in memory */
+bool telegram_send_message(const char *chat_id, const char *text, const char *kb) {
+    (void)chat_id; (void)text; (void)kb;
+    return true;
+}
 void fw_detect_wan_if(char *out_if, size_t sz) { snprintf(out_if, sz, "eth1"); }
 void fw_init(void) {}
 void fw_ensure_device_rules(rmeter_device_t *devs, int count) { (void)devs; (void)count; }

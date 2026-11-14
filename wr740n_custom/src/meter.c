@@ -1,6 +1,7 @@
 #include "meter.h"
 #include "firewall.h"
 #include "json_util.h"
+#include "fazakkir.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -55,6 +56,11 @@ static bool s_wifi_disabled = false;
 static int s_wifi_txpower_dbm = 0;
 static int s_wifi_signal_dbm = 0;
 static time_t s_last_wifi_meta = 0;
+static char s_wan_ip[24] = "";
+static char s_wan_gw[24] = "";
+static char s_wan_proto[16] = "dhcp";
+static char s_lan_ip[24] = "192.168.1.1";
+static bool s_pppoe_up = false;
 
 static void norm_mac(const char *in, char *out, size_t sz) {
     if (!in || !out || sz < 18) return;
@@ -388,11 +394,88 @@ void meter_save_all(void) {
     free(snap_devs);
 }
 
+static bool read_sys_u64(const char *path, uint64_t *out);
+static uint64_t s_wan_ifindex = 0;
+
+static void read_if_ipv4(const char *ifname, char *ip_out, size_t ip_sz, char *peer_out, size_t peer_sz) {
+    if (ip_out && ip_sz) ip_out[0] = '\0';
+    if (peer_out && peer_sz) peer_out[0] = '\0';
+    if (!ifname || !ifname[0]) return;
+    char cmd[96];
+    snprintf(cmd, sizeof(cmd), "ip -4 addr show dev %s 2>/dev/null", ifname);
+    FILE *fp = popen(cmd, "r");
+    if (!fp) return;
+    char line[256];
+    while (fgets(line, sizeof(line), fp)) {
+        char *p = strstr(line, "inet ");
+        if (!p) continue;
+        p += 5;
+        while (*p == ' ') p++;
+        char ipbuf[32] = {0};
+        if (sscanf(p, "%31[^/ \t\r\n]", ipbuf) == 1 && ip_out && ip_sz) {
+            snprintf(ip_out, ip_sz, "%s", ipbuf);
+        }
+        char *pp = strstr(line, "peer ");
+        if (pp && peer_out && peer_sz) {
+            pp += 5;
+            while (*pp == ' ') pp++;
+            char gwbuf[32] = {0};
+            if (sscanf(pp, "%31[^/ \t\r\n]", gwbuf) == 1) {
+                snprintf(peer_out, peer_sz, "%s", gwbuf);
+            }
+        }
+        break;
+    }
+    pclose(fp);
+}
+
+static void refresh_net_meta(void) {
+    FILE *fp = popen("uci -q get network.wan.proto 2>/dev/null", "r");
+    if (fp) {
+        char pbuf[24] = {0};
+        if (fgets(pbuf, sizeof(pbuf), fp)) {
+            pbuf[strcspn(pbuf, "\r\n \t")] = '\0';
+            if (pbuf[0]) snprintf(s_wan_proto, sizeof(s_wan_proto), "%s", pbuf);
+        }
+        pclose(fp);
+    }
+
+    char peer_gw[24] = {0};
+    read_if_ipv4(g_wan_if, s_wan_ip, sizeof(s_wan_ip), peer_gw, sizeof(peer_gw));
+
+    char lan_tmp[24] = {0};
+    read_if_ipv4(g_lan_if, lan_tmp, sizeof(lan_tmp), NULL, 0);
+    if (lan_tmp[0]) snprintf(s_lan_ip, sizeof(s_lan_ip), "%s", lan_tmp);
+
+    s_wan_gw[0] = '\0';
+    fp = popen("ip route show default 2>/dev/null", "r");
+    if (fp) {
+        char line[256];
+        if (fgets(line, sizeof(line), fp)) {
+            char *via = strstr(line, " via ");
+            if (via) {
+                via += 5;
+                while (*via == ' ') via++;
+                char gw[24] = {0};
+                if (sscanf(via, "%23s", gw) == 1) snprintf(s_wan_gw, sizeof(s_wan_gw), "%s", gw);
+            }
+        }
+        pclose(fp);
+    }
+    if (!s_wan_gw[0] && peer_gw[0]) snprintf(s_wan_gw, sizeof(s_wan_gw), "%s", peer_gw);
+
+    s_pppoe_up = (strncmp(g_wan_if, "pppoe", 5) == 0 && s_wan_ip[0] != '\0');
+}
+
 void meter_init(void) {
     mkdir("/tmp/rmeter", 0755);
     mkdir("/etc/rmeter", 0755);
     meter_load_all();
     fw_detect_wan_if(g_wan_if, sizeof(g_wan_if));
+    refresh_net_meta();
+    char p_idx[96];
+    snprintf(p_idx, sizeof(p_idx), "/sys/class/net/%s/ifindex", g_wan_if);
+    read_sys_u64(p_idx, &s_wan_ifindex);
     fw_init();
     fw_ensure_device_rules(g_devices, g_device_count);
     fw_sync_blocks_and_vip(g_devices, g_device_count);
@@ -620,6 +703,22 @@ void meter_tick(double dt_sec) {
             g_fw_dirty = true;
             g_tc_dirty = true;
         }
+        /* Re-detect WAN interface & ifindex (handles PPPoE dial-up / reconnect) */
+        char cur_wan[32] = {0};
+        fw_detect_wan_if(cur_wan, sizeof(cur_wan));
+        if (cur_wan[0] && strcmp(cur_wan, g_wan_if) != 0) {
+            snprintf(g_wan_if, sizeof(g_wan_if), "%s", cur_wan);
+            s_wan_init = false;
+            g_tc_dirty = true;
+        }
+        char p_idx[96];
+        snprintf(p_idx, sizeof(p_idx), "/sys/class/net/%s/ifindex", g_wan_if);
+        uint64_t cur_idx = 0;
+        if (read_sys_u64(p_idx, &cur_idx) && cur_idx != s_wan_ifindex) {
+            s_wan_ifindex = cur_idx;
+            g_tc_dirty = true;
+        }
+        refresh_net_meta();
     }
 
     if (g_fw_dirty) {
@@ -711,9 +810,21 @@ void meter_write_ram_json(void) {
                      tm_val.tm_hour, tm_val.tm_min, tm_val.tm_sec);
         }
 
+        char np_name[32] = "", np_time[12] = "";
+        int np_rem = -1;
+        fazakkir_get_next_prayer(now, np_name, sizeof(np_name), np_time, sizeof(np_time), &np_rem);
+
         fprintf(fp, "{\n");
         fprintf(fp, "  \"fw_version\": \"%s\",\n", g_config.fw_version);
+        fprintf(fp, "  \"next_prayer_name\": \"%s\",\n", np_name);
+        fprintf(fp, "  \"next_prayer_time\": \"%s\",\n", np_time);
+        fprintf(fp, "  \"next_prayer_rem_min\": %d,\n", np_rem);
         fprintf(fp, "  \"wan_if\": \"%s\",\n", g_wan_if);
+        fprintf(fp, "  \"wan_proto\": \"%s\",\n", s_wan_proto);
+        fprintf(fp, "  \"wan_ip\": \"%s\",\n", s_wan_ip);
+        fprintf(fp, "  \"wan_gw\": \"%s\",\n", s_wan_gw);
+        fprintf(fp, "  \"lan_ip\": \"%s\",\n", s_lan_ip);
+        fprintf(fp, "  \"pppoe_up\": %s,\n", s_pppoe_up ? "true" : "false");
         fprintf(fp, "  \"uptime_s\": %lu,\n", uptime_s);
         fprintf(fp, "  \"ram_total_kb\": %lu,\n", ram_tot);
         fprintf(fp, "  \"ram_free_kb\": %lu,\n", ram_free);
