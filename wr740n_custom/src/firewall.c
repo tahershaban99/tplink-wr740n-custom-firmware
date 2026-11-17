@@ -180,26 +180,30 @@ static bool parse_chain_counters(const char *chain, bool is_src, rmeter_device_t
         saw_rule = true;
 
         const char *target_ip = is_src ? src : dst;
+        int match = -1;
         for (int i = 0; i < count; i++) {
             if (devs[i].ip[0] && strcmp(devs[i].ip, target_ip) == 0) {
-                if (is_src) {
-                    if (bytes >= devs[i].prev_ipt_up) {
-                        uint64_t delta = bytes - devs[i].prev_ipt_up;
-                        devs[i].up_bytes += delta;
-                    } else {
-                        devs[i].up_bytes += bytes;
-                    }
-                    devs[i].prev_ipt_up = bytes;
+                if (devs[i].online) { match = i; break; }
+                if (match < 0) match = i;
+            }
+        }
+        if (match >= 0) {
+            if (is_src) {
+                if (bytes >= devs[match].prev_ipt_up) {
+                    uint64_t delta = bytes - devs[match].prev_ipt_up;
+                    devs[match].up_bytes += delta;
                 } else {
-                    if (bytes >= devs[i].prev_ipt_down) {
-                        uint64_t delta = bytes - devs[i].prev_ipt_down;
-                        devs[i].down_bytes += delta;
-                    } else {
-                        devs[i].down_bytes += bytes;
-                    }
-                    devs[i].prev_ipt_down = bytes;
+                    devs[match].up_bytes += bytes;
                 }
-                break;
+                devs[match].prev_ipt_up = bytes;
+            } else {
+                if (bytes >= devs[match].prev_ipt_down) {
+                    uint64_t delta = bytes - devs[match].prev_ipt_down;
+                    devs[match].down_bytes += delta;
+                } else {
+                    devs[match].down_bytes += bytes;
+                }
+                devs[match].prev_ipt_down = bytes;
             }
         }
     }

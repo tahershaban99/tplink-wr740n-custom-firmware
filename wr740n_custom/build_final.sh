@@ -55,6 +55,20 @@ cp "$PROJ/files/etc/uci-defaults/99-rmeter-setup" "$STAGE/etc/uci-defaults/99-rm
 cp "$PROJ/files/etc/config/uhttpd" "$STAGE/etc/config/uhttpd"
 cp "$PROJ/files/etc/rmeter/tg_ca.pem" "$STAGE/etc/rmeter/tg_ca.pem"
 cp "$PROJ/files/www/index.html" "$STAGE/www/index.html"
+python3 - <<'PY' "$STAGE/www/index.html"
+import re, sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+# Strip HTML comments and leading/trailing whitespace per line to save squashfs/flash space
+s = re.sub(r'<!--[\s\S]*?-->', '', s)
+lines = [ln.strip() for ln in s.splitlines() if ln.strip()]
+out = '\n'.join(lines) + '\n'
+open(p, "w", encoding="utf-8").write(out)
+print(f"Minified staged index.html: {len(s)} -> {len(out)} bytes")
+PY
+if command -v node >/dev/null 2>&1; then
+  node -e "const fs=require('fs'),vm=require('vm');const h=fs.readFileSync('$STAGE/www/index.html','utf8');const js=h.split('<script>')[1].split('</script>')[0];new vm.Script(js);console.log('[PASS] Minified JS syntax check');"
+fi
 cp "$PROJ/src/rmeterd" "$STAGE/usr/sbin/rmeterd"
 cp "$PROJ/src/rmeter_cgi" "$STAGE/www/cgi-bin/api"
 
@@ -68,7 +82,7 @@ cd "$IB"
 mkdir -p staging_dir/host tmp
 touch staging_dir/host/.prereq-build
 PKGS="-ip6tables -kmod-ip6tables -kmod-nf-conntrack6 -odhcp6c -odhcpd-ipv6only -luci -opkg uhttpd iwinfo libustream-mbedtls libmbedtls tc kmod-sched-core iptables-mod-ipopt kmod-ipt-ipopt"
-make image PROFILE=tl-wr740n-v4 PACKAGES="$PKGS" FILES="$STAGE"
+make image PROFILE=tl-wr740n-v4 PACKAGES="$PKGS" FILES="$STAGE" CONFIG_CLEAN_IPKG=y
 
 echo "=== 6. Exporting Final Images & Checksums ==="
 mkdir -p "$OUT"

@@ -568,7 +568,7 @@ canvas{width:100%;display:block;border-radius:var(--r-sm);background:var(--bg-su
         <div class="card">
           <div class="stat-lbl">المعالج والرام</div>
           <div class="stat-val num" id="sRam">-</div>
-          <div class="stat-sub">CPU: <span class="num" id="sCpu">-</span> • متاح: <span class="num" id="sRamFree">-</span></div>
+          <div class="stat-sub">CPU: <span class="num" id="sCpu">-</span> • رام: <span class="num" id="sRamFree">-</span> • فلاش: <span class="num" id="sFlashFree">-</span></div>
           <div class="bar" id="sRamBar"><i style="width:0%"></i></div>
         </div>
         <div class="card">
@@ -1241,6 +1241,8 @@ function render(){
   const cl=S.cpu_load||0, cPct=Math.min(100,Math.round(cl*100));
   $('sRam').textContent=rt?((ru/1024).toFixed(1)+' / '+(rt/1024).toFixed(1)+' MB'):'-';
   $('sRamFree').textContent=rt?((rf/1024).toFixed(1)+' MB'):'-';
+  const ff=S.flash_free_kb||0, ft=S.flash_total_kb||0;
+  if($('sFlashFree')){ $('sFlashFree').textContent=ft?(ff+' KB'):'-'; $('sFlashFree').style.color=(ft>0&&ff<=40)?'var(--err)':''; }
   $('sCpu').textContent=cl.toFixed(2)+' ('+cPct+'%)';
   $('sRamBar').className='bar '+(rPct>85?'err':rPct>70?'warn':'ok');
   $('sRamBar').firstChild.style.width=rPct.toFixed(1)+'%';
@@ -1619,8 +1621,11 @@ function renderDevices(force){
 
 async function saveRow(mac){
   const d=S.devices.find(x=>x.mac===mac);if(!d)return;
-  const v=devVals(d);
-  const r=await api('device_save',{mac,name:String(v.name).trim(),quota_bytes:Math.round((parseFloat(v.quota)||0)*gbUnit()),cap_down_kbps:Math.round((parseFloat(v.capD)||0)*1000),cap_up_kbps:Math.round((parseFloat(v.capU)||0)*1000),bound_ip:String(v.ip).trim(),tg_chat_id:String(v.tg).trim()});
+  const v=devVals(d), df=dirtyMap[mac]||{};
+  const body={mac,name:String(v.name).trim(),quota_bytes:Math.round((parseFloat(v.quota)||0)*gbUnit()),bound_ip:String(v.ip).trim(),tg_chat_id:String(v.tg).trim()};
+  if(df.capD!==undefined) body.cap_down_kbps=Math.round((parseFloat(v.capD)||0)*1000);
+  if(df.capU!==undefined) body.cap_up_kbps=Math.round((parseFloat(v.capU)||0)*1000);
+  const r=await api('device_save',body);
   if(!r||!r.ok){toast((r&&(r.msg||r.error))||'فشل حفظ بيانات الجهاز');return;}
   delete dirtyMap[mac];
   document.querySelectorAll('[data-mac="'+mac+'"] .dirty').forEach(e=>e.classList.remove('dirty'));

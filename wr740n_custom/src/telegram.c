@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/statvfs.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -1620,6 +1621,28 @@ void telegram_check_alerts(void) {
     }
 
     pthread_mutex_unlock(&g_lock);
+
+    /* 3. Low JFFS2 Flash Space alert (<= 40 KB) */
+    static bool s_flash_low_alerted = false;
+    struct statvfs vfs;
+    if (statvfs("/overlay", &vfs) == 0 || statvfs("/", &vfs) == 0) {
+        unsigned long long free_kb = ((uint64_t)vfs.f_bavail * vfs.f_frsize) / 1024ULL;
+        unsigned long long tot_kb  = ((uint64_t)vfs.f_blocks * vfs.f_frsize) / 1024ULL;
+        if (tot_kb > 0 && free_kb <= 40ULL) {
+            if (!s_flash_low_alerted) {
+                s_flash_low_alerted = true;
+                char msg[320];
+                snprintf(msg, sizeof(msg),
+                         "⚠️ <b>تنبيه امتلاء مساحة الفلاش!</b>\n"
+                         "💾 المساحة المتاحة: <b>%llu KB</b> من أصل <b>%llu KB</b>\n"
+                         "قد تفشل عمليات حفظ الإعدادات إذا استمر انخفاض المساحة.",
+                         free_kb, tot_kb);
+                telegram_broadcast_admins(msg, NULL);
+            }
+        } else if (free_kb >= 52ULL) {
+            s_flash_low_alerted = false;
+        }
+    }
 }
 
 /* ==================== ADMIN INTERACTIVE HUB & MENUS ==================== */

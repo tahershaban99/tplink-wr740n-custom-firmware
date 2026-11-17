@@ -20,7 +20,7 @@ extern bool g_flash_dirty;
 
 void meter_init(void);
 void meter_load_all(void);
-void meter_save_all(void);
+bool meter_save_all(void);
 void meter_tick(double dt_sec);
 void meter_write_ram_json(void);
 

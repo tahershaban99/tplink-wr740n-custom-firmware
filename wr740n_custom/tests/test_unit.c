@@ -234,6 +234,18 @@ static void test_regression_fixes(void) {
     assert(pthread_create(&t2, NULL, concurrent_saver_worker, NULL) == 0);
     pthread_join(t1, NULL);
     pthread_join(t2, NULL);
+    /* 4. Archived usage preserved on delete and cleared on reset_all */
+    g_config.scale_mode = 1;
+    g_config.archived_used_bytes = 0;
+    g_devices[0].up_bytes = 1000;
+    g_devices[0].down_bytes = 2000;
+    assert(meter_total_used_bytes() == 3000);
+    assert(meter_delete_device("AA:BB:CC:11:22:33"));
+    assert(g_device_count == 0);
+    assert(meter_total_used_bytes() == 3000);
+    meter_reset_all_usage();
+    assert(meter_total_used_bytes() == 0);
+
     printf("[PASS] test_regression_fixes\n");
 }
 

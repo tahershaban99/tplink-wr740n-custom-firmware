@@ -79,7 +79,7 @@ uint64_t meter_scaled_bytes(uint64_t raw) {
 }
 
 uint64_t meter_total_used_bytes(void) {
-    uint64_t sum = 0;
+    uint64_t sum = g_config.archived_used_bytes;
     for (int i = 0; i < g_device_count; i++) {
         sum += g_devices[i].up_bytes + g_devices[i].down_bytes;
     }
@@ -159,6 +159,7 @@ static int ensure_device(const char *mac, const char *ip, const char *hostname) 
         if (g_device_count >= RMETER_MAX_DEVICES) {
             int ev = find_evictable_device();
             if (ev < 0) return -1;
+            g_config.archived_used_bytes += g_devices[ev].up_bytes + g_devices[ev].down_bytes;
             for (int i = ev; i + 1 < g_device_count; i++) {
                 g_devices[i] = g_devices[i + 1];
             }
@@ -176,6 +177,11 @@ static int ensure_device(const char *mac, const char *ip, const char *hostname) 
         g_tc_dirty = true;
     }
     if (is_ipv4_str(ip) && strcmp(g_devices[idx].ip, ip) != 0) {
+        for (int i = 0; i < g_device_count; i++) {
+            if (i != idx && !g_devices[i].online && strcmp(g_devices[i].ip, ip) == 0) {
+                g_devices[i].ip[0] = '\0';
+            }
+        }
         snprintf(g_devices[idx].ip, sizeof(g_devices[idx].ip), "%s", ip);
         g_fw_dirty = true;
         g_tc_dirty = true;
@@ -235,6 +241,7 @@ void meter_load_all(void) {
             const char *k = line;
             const char *v = eq + 1;
             if (strcmp(k, "main_quota_bytes") == 0) g_config.main_quota_bytes = strtoull(v, NULL, 10);
+            else if (strcmp(k, "archived_used_bytes") == 0) g_config.archived_used_bytes = strtoull(v, NULL, 10);
             else if (strcmp(k, "wan_down_kbps") == 0) g_config.wan_down_kbps = (uint32_t)strtoul(v, NULL, 10);
             else if (strcmp(k, "wan_up_kbps") == 0) g_config.wan_up_kbps = (uint32_t)strtoul(v, NULL, 10);
             else if (strcmp(k, "start_date") == 0) snprintf(g_config.start_date, sizeof(g_config.start_date), "%s", v);
@@ -348,7 +355,7 @@ static bool commit_tmp_file(FILE *fp, const char *tmp_path, const char *dst_path
     return ok;
 }
 
-void meter_save_all(void) {
+bool meter_save_all(void) {
     const char *fdir = flash_dir();
     mkdir(fdir, 0755);
 
@@ -357,7 +364,7 @@ void meter_save_all(void) {
     if (!snap_cfg || !snap_devs) {
         free(snap_cfg);
         free(snap_devs);
-        return;
+        return false;
     }
 
     pthread_mutex_lock(&s_save_lock);
@@ -377,60 +384,86 @@ void meter_save_all(void) {
     g_flash_dirty = false;
     pthread_mutex_unlock(&g_lock);
 
-    bool write_err = false;
-    char p_cfg[160], tmp_cfg[176];
-    flash_path(p_cfg, sizeof(p_cfg), "config.conf");
-    snprintf(tmp_cfg, sizeof(tmp_cfg), "%s.tmp", p_cfg);
-    FILE *fp = fopen(tmp_cfg, "w");
-    if (fp) {
-        fprintf(fp, "main_quota_bytes=%llu\n", (unsigned long long)snap_cfg->main_quota_bytes);
-        fprintf(fp, "wan_down_kbps=%u\n", (unsigned)snap_cfg->wan_down_kbps);
-        fprintf(fp, "wan_up_kbps=%u\n", (unsigned)snap_cfg->wan_up_kbps);
-        fprintf(fp, "start_date=%s\n", snap_cfg->start_date);
-        fprintf(fp, "end_date=%s\n", snap_cfg->end_date);
-        fprintf(fp, "period_days=%u\n", (unsigned)snap_cfg->period_days);
-        fprintf(fp, "gb_standard=%u\n", (unsigned)snap_cfg->gb_standard);
-        fprintf(fp, "scale_pct=%u\n", (unsigned)snap_cfg->scale_pct);
-        fprintf(fp, "scale_mode=%u\n", (unsigned)snap_cfg->scale_mode);
-        fprintf(fp, "auto_reboot_enabled=%d\n", snap_cfg->auto_reboot_enabled ? 1 : 0);
-        fprintf(fp, "auto_reboot_hour=%u\n", (unsigned)snap_cfg->auto_reboot_hour);
-        fprintf(fp, "auto_reboot_min=%u\n", (unsigned)snap_cfg->auto_reboot_min);
-        fprintf(fp, "auto_reboot_tz=%d\n", (int)snap_cfg->auto_reboot_tz);
-        fprintf(fp, "tg_enabled=%d\n", snap_cfg->tg_enabled ? 1 : 0);
-        fprintf(fp, "tg_interactive=%d\n", snap_cfg->tg_interactive ? 1 : 0);
-        fprintf(fp, "tg_token=%s\n", snap_cfg->tg_token);
-        fprintf(fp, "tg_admin_ids=%s\n", snap_cfg->tg_admin_ids);
-        fprintf(fp, "tg_thresholds=%s\n", snap_cfg->tg_thresholds);
-        fprintf(fp, "main_alert_flags=%u\n", (unsigned)snap_cfg->main_alert_flags);
-        fprintf(fp, "tg_last_update_id=%lld\n", (long long)snap_cfg->tg_last_update_id);
-        fprintf(fp, "ota_version_url=%s\n", snap_cfg->ota_version_url);
-        fprintf(fp, "observer_mode_enabled=%d\n", snap_cfg->observer_mode_enabled ? 1 : 0);
-        fprintf(fp, "ota_auto_check_enabled=%d\n", snap_cfg->ota_auto_check_enabled ? 1 : 0);
-        if (!commit_tmp_file(fp, tmp_cfg, p_cfg)) write_err = true;
-    } else {
-        write_err = true;
+    static rmeter_config_t s_last_cfg;
+    static bool s_has_last_cfg = false;
+    bool cfg_changed = !s_has_last_cfg ||
+                       memcmp(snap_cfg, &s_last_cfg, offsetof(rmeter_config_t, tg_alert_msgs)) != 0;
+    bool alerts_changed = !s_has_last_cfg ||
+                          memcmp(snap_cfg->tg_alert_msgs, s_last_cfg.tg_alert_msgs, sizeof(snap_cfg->tg_alert_msgs)) != 0;
+    bool any_alert = false;
+    for (int i = 0; i < RMETER_MAX_THRESHOLDS; i++) {
+        if (snap_cfg->tg_alert_msgs[i][0]) { any_alert = true; break; }
     }
 
-    char p_alerts[160], tmp_alerts[176];
-    flash_path(p_alerts, sizeof(p_alerts), "tg_alerts.conf");
-    snprintf(tmp_alerts, sizeof(tmp_alerts), "%s.tmp", p_alerts);
-    fp = fopen(tmp_alerts, "w");
-    if (fp) {
-        for (int i = 0; i < RMETER_MAX_THRESHOLDS; i++) {
-            if (!snap_cfg->tg_alert_msgs[i][0]) continue;
-            fprintf(fp, "%d=", i);
-            for (size_t k = 0; snap_cfg->tg_alert_msgs[i][k]; k++) {
-                char c = snap_cfg->tg_alert_msgs[i][k];
-                if (c == '\n') fputs("\\n", fp);
-                else if (c == '\r') continue;
-                else if (c == '\\') fputs("\\\\", fp);
-                else fputc(c, fp);
-            }
-            fputc('\n', fp);
+    bool write_err = false;
+    FILE *fp = NULL;
+    if (cfg_changed) {
+        char p_cfg[160], tmp_cfg[176];
+        flash_path(p_cfg, sizeof(p_cfg), "config.conf");
+        snprintf(tmp_cfg, sizeof(tmp_cfg), "%s.tmp", p_cfg);
+        fp = fopen(tmp_cfg, "w");
+        if (fp) {
+            fprintf(fp, "main_quota_bytes=%llu\n", (unsigned long long)snap_cfg->main_quota_bytes);
+            fprintf(fp, "archived_used_bytes=%llu\n", (unsigned long long)snap_cfg->archived_used_bytes);
+            fprintf(fp, "wan_down_kbps=%u\n", (unsigned)snap_cfg->wan_down_kbps);
+            fprintf(fp, "wan_up_kbps=%u\n", (unsigned)snap_cfg->wan_up_kbps);
+            fprintf(fp, "start_date=%s\n", snap_cfg->start_date);
+            fprintf(fp, "end_date=%s\n", snap_cfg->end_date);
+            fprintf(fp, "period_days=%u\n", (unsigned)snap_cfg->period_days);
+            fprintf(fp, "gb_standard=%u\n", (unsigned)snap_cfg->gb_standard);
+            fprintf(fp, "scale_pct=%u\n", (unsigned)snap_cfg->scale_pct);
+            fprintf(fp, "scale_mode=%u\n", (unsigned)snap_cfg->scale_mode);
+            fprintf(fp, "auto_reboot_enabled=%d\n", snap_cfg->auto_reboot_enabled ? 1 : 0);
+            fprintf(fp, "auto_reboot_hour=%u\n", (unsigned)snap_cfg->auto_reboot_hour);
+            fprintf(fp, "auto_reboot_min=%u\n", (unsigned)snap_cfg->auto_reboot_min);
+            fprintf(fp, "auto_reboot_tz=%d\n", (int)snap_cfg->auto_reboot_tz);
+            fprintf(fp, "tg_enabled=%d\n", snap_cfg->tg_enabled ? 1 : 0);
+            fprintf(fp, "tg_interactive=%d\n", snap_cfg->tg_interactive ? 1 : 0);
+            fprintf(fp, "tg_token=%s\n", snap_cfg->tg_token);
+            fprintf(fp, "tg_admin_ids=%s\n", snap_cfg->tg_admin_ids);
+            fprintf(fp, "tg_thresholds=%s\n", snap_cfg->tg_thresholds);
+            fprintf(fp, "main_alert_flags=%u\n", (unsigned)snap_cfg->main_alert_flags);
+            fprintf(fp, "tg_last_update_id=%lld\n", (long long)snap_cfg->tg_last_update_id);
+            fprintf(fp, "ota_version_url=%s\n", snap_cfg->ota_version_url);
+            fprintf(fp, "observer_mode_enabled=%d\n", snap_cfg->observer_mode_enabled ? 1 : 0);
+            fprintf(fp, "ota_auto_check_enabled=%d\n", snap_cfg->ota_auto_check_enabled ? 1 : 0);
+            if (!commit_tmp_file(fp, tmp_cfg, p_cfg)) write_err = true;
+        } else {
+            write_err = true;
         }
-        if (!commit_tmp_file(fp, tmp_alerts, p_alerts)) write_err = true;
-    } else {
-        write_err = true;
+    }
+
+    if (alerts_changed) {
+        char p_alerts[160], tmp_alerts[176];
+        flash_path(p_alerts, sizeof(p_alerts), "tg_alerts.conf");
+        if (!any_alert) {
+            remove(p_alerts);
+        } else {
+            snprintf(tmp_alerts, sizeof(tmp_alerts), "%s.tmp", p_alerts);
+            fp = fopen(tmp_alerts, "w");
+            if (fp) {
+                for (int i = 0; i < RMETER_MAX_THRESHOLDS; i++) {
+                    if (!snap_cfg->tg_alert_msgs[i][0]) continue;
+                    fprintf(fp, "%d=", i);
+                    for (size_t k = 0; snap_cfg->tg_alert_msgs[i][k]; k++) {
+                        char c = snap_cfg->tg_alert_msgs[i][k];
+                        if (c == '\n') fputs("\\n", fp);
+                        else if (c == '\r') continue;
+                        else if (c == '\\') fputs("\\\\", fp);
+                        else fputc(c, fp);
+                    }
+                    fputc('\n', fp);
+                }
+                if (!commit_tmp_file(fp, tmp_alerts, p_alerts)) write_err = true;
+            } else {
+                write_err = true;
+            }
+        }
+    }
+
+    if (!write_err) {
+        s_last_cfg = *snap_cfg;
+        s_has_last_cfg = true;
     }
 
     char p_db[160], tmp_db[176];
@@ -468,6 +501,7 @@ void meter_save_all(void) {
 
     free(snap_cfg);
     free(snap_devs);
+    return !write_err;
 }
 
 static bool read_sys_u64(const char *path, uint64_t *out);
@@ -1184,6 +1218,7 @@ bool meter_delete_device(const char *mac) {
     pthread_mutex_lock(&g_lock);
     int idx = meter_find_by_mac_or_ip(mac);
     if (idx < 0) { pthread_mutex_unlock(&g_lock); return false; }
+    g_config.archived_used_bytes += g_devices[idx].up_bytes + g_devices[idx].down_bytes;
     for (int i = idx; i + 1 < g_device_count; i++) {
         g_devices[i] = g_devices[i + 1];
     }
@@ -1207,6 +1242,7 @@ void meter_reset_all_usage(void) {
             g_fw_dirty = true;
         }
     }
+    g_config.archived_used_bytes = 0;
     g_config.main_alert_flags = 0;
     g_flash_dirty = true;
     pthread_mutex_unlock(&g_lock);

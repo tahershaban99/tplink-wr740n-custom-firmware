@@ -54,6 +54,7 @@ typedef struct {
 
 typedef struct {
     uint64_t main_quota_bytes; /* 0 = unlimited */
+    uint64_t archived_used_bytes; /* cumulative raw bytes from deleted/evicted devices */
     uint32_t wan_down_kbps;    /* 0 = auto 100mbit default */
     uint32_t wan_up_kbps;      /* 0 = auto 100mbit default */
     char start_date[12];       /* YYYY-MM-DD */

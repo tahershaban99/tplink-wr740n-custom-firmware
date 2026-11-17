@@ -73,14 +73,17 @@ static void load_auth(char *user, size_t usz, char *pass, size_t psz) {
     fclose(fp);
 }
 
-static void save_auth(const char *user, const char *pass) {
+static bool save_auth(const char *user, const char *pass) {
     mkdir("/etc/rmeter", 0755);
     FILE *fp = fopen(AUTH_CONF ".tmp", "w");
-    if (!fp) return;
-    fprintf(fp, "user=%s\npass=%s\n", user, pass);
-    fclose(fp);
-    rename(AUTH_CONF ".tmp", AUTH_CONF);
+    if (!fp) return false;
+    bool ok = (fprintf(fp, "user=%s\npass=%s\n", user, pass) > 0 && fflush(fp) == 0 && !ferror(fp));
+    if (ok) fsync(fileno(fp));
+    if (fclose(fp) != 0) ok = false;
+    if (ok && rename(AUTH_CONF ".tmp", AUTH_CONF) != 0) ok = false;
+    if (!ok) { unlink(AUTH_CONF ".tmp"); return false; }
     chmod(AUTH_CONF, 0600);
+    return true;
 }
 
 static void gen_token(char *out, size_t sz) {
@@ -791,7 +794,11 @@ int main(void) {
             printf("{\"ok\":false,\"error\":\"كلمة المرور الحالية غير صحيحة أو الجديدة قصيرة جداً\"}\n");
             return 0;
         }
-        save_auth(newu[0] ? newu : cfg_u, newp);
+        if (!save_auth(newu[0] ? newu : cfg_u, newp)) {
+            send_json_hdr(NULL);
+            printf("{\"ok\":false,\"error\":\"فشل حفظ كلمة المرور على الفلاش (تحقق من المساحة المتاحة)\"}\n");
+            return 0;
+        }
         send_json_hdr(NULL);
         printf("{\"ok\":true}\n");
         return 0;

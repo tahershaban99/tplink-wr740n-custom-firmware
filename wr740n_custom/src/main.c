@@ -64,6 +64,11 @@ static void sync_static_lease_uci(const char *mac, const char *ip, const char *n
     }
 }
 
+static void reply_save_result(char *resp, size_t resp_sz, bool saved) {
+    if (saved) snprintf(resp, resp_sz, "{\"ok\":true}");
+    else snprintf(resp, resp_sz, "{\"ok\":false,\"msg\":\"فشل الحفظ على الفلاش (تحقق من المساحة المتاحة)\"}");
+}
+
 static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
     char action[48] = {0};
     if (!json_get_str(req, "action", action, sizeof(action))) {
@@ -112,53 +117,65 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
             meter_set_device_binding(mac, bound_ip);
             sync_static_lease_uci(mac, bound_ip, cur_name);
         }
-        meter_save_all();
+        bool saved = meter_save_all();
         meter_write_ram_json();
-        snprintf(resp, resp_sz, "{\"ok\":true}");
+        reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "device_block") == 0) {
         char mac[32] = {0};
         bool blk = false;
         json_get_str(req, "mac", mac, sizeof(mac));
         json_get_bool(req, "blocked", &blk);
         bool ok = meter_set_device_blocked(mac, blk, false);
-        if (ok) { meter_save_all(); meter_write_ram_json(); }
-        snprintf(resp, resp_sz, "{\"ok\":%s}", ok ? "true" : "false");
+        bool saved = true;
+        if (ok) { saved = meter_save_all(); meter_write_ram_json(); }
+        if (!ok) snprintf(resp, resp_sz, "{\"ok\":false}");
+        else reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "device_gaming") == 0) {
         char mac[32] = {0};
         bool vip = false;
         json_get_str(req, "mac", mac, sizeof(mac));
         json_get_bool(req, "gaming_mode", &vip);
         bool ok = meter_set_device_gaming(mac, vip);
-        if (ok) { meter_save_all(); meter_write_ram_json(); }
-        snprintf(resp, resp_sz, "{\"ok\":%s}", ok ? "true" : "false");
+        bool saved = true;
+        if (ok) { saved = meter_save_all(); meter_write_ram_json(); }
+        if (!ok) snprintf(resp, resp_sz, "{\"ok\":false}");
+        else reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "device_speed_unlock") == 0) {
         char mac[32] = {0};
         bool unl = false;
         json_get_str(req, "mac", mac, sizeof(mac));
         json_get_bool(req, "speed_unlocked", &unl);
         bool ok = meter_set_device_speed_unlocked(mac, unl);
-        if (ok) { meter_save_all(); meter_write_ram_json(); }
-        snprintf(resp, resp_sz, "{\"ok\":%s}", ok ? "true" : "false");
+        bool saved = true;
+        if (ok) { saved = meter_save_all(); meter_write_ram_json(); }
+        if (!ok) snprintf(resp, resp_sz, "{\"ok\":false}");
+        else reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "device_add_quota") == 0) {
         char mac[32] = {0};
         int64_t add_b = 0;
         json_get_str(req, "mac", mac, sizeof(mac));
         json_get_i64(req, "add_bytes", &add_b);
         bool ok = meter_add_device_quota(mac, add_b);
-        if (ok) { meter_save_all(); meter_write_ram_json(); }
-        snprintf(resp, resp_sz, "{\"ok\":%s}", ok ? "true" : "false");
+        bool saved = true;
+        if (ok) { saved = meter_save_all(); meter_write_ram_json(); }
+        if (!ok) snprintf(resp, resp_sz, "{\"ok\":false}");
+        else reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "device_reset") == 0) {
         char mac[32] = {0};
         json_get_str(req, "mac", mac, sizeof(mac));
         bool ok = meter_reset_device_usage(mac);
-        if (ok) { meter_save_all(); meter_write_ram_json(); }
-        snprintf(resp, resp_sz, "{\"ok\":%s}", ok ? "true" : "false");
+        bool saved = true;
+        if (ok) { saved = meter_save_all(); meter_write_ram_json(); }
+        if (!ok) snprintf(resp, resp_sz, "{\"ok\":false}");
+        else reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "device_delete") == 0) {
         char mac[32] = {0};
         json_get_str(req, "mac", mac, sizeof(mac));
         bool ok = meter_delete_device(mac);
-        if (ok) { meter_save_all(); meter_write_ram_json(); }
-        snprintf(resp, resp_sz, "{\"ok\":%s}", ok ? "true" : "false");
+        bool saved = true;
+        if (ok) { saved = meter_save_all(); meter_write_ram_json(); }
+        if (!ok) snprintf(resp, resp_sz, "{\"ok\":false}");
+        else reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "main_quota") == 0) {
         uint64_t mq = 0, pd = 30, wdl = 0, wul = 0;
         char sd[16] = {0}, ed[16] = {0};
@@ -179,9 +196,9 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
             g_tc_dirty = true;
         }
         pthread_mutex_unlock(&g_lock);
-        meter_save_all();
+        bool saved = meter_save_all();
         meter_write_ram_json();
-        snprintf(resp, resp_sz, "{\"ok\":true}");
+        reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "meter_scale") == 0) {
         uint64_t gbs = 1024, pct = 100, mode = 0;
         pthread_mutex_lock(&g_lock);
@@ -189,14 +206,14 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
         if (json_get_u64(req, "scale_pct", &pct) && pct >= 50 && pct <= 200) g_config.scale_pct = (uint16_t)pct;
         if (json_get_u64(req, "scale_mode", &mode)) g_config.scale_mode = (uint8_t)mode;
         pthread_mutex_unlock(&g_lock);
-        meter_save_all();
+        bool saved = meter_save_all();
         meter_write_ram_json();
-        snprintf(resp, resp_sz, "{\"ok\":true}");
+        reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "meter_reset_all") == 0) {
         meter_reset_all_usage();
-        meter_save_all();
+        bool saved = meter_save_all();
         meter_write_ram_json();
-        snprintf(resp, resp_sz, "{\"ok\":true}");
+        reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "auto_reboot") == 0) {
         bool en = false;
         uint64_t hr = 4, mn = 0;
@@ -207,9 +224,9 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
         if (json_get_u64(req, "min", &mn) && mn < 60) g_config.auto_reboot_min = (uint8_t)mn;
         if (json_get_i64(req, "tz", &tz) && tz >= -12 && tz <= 14) g_config.auto_reboot_tz = (int8_t)tz;
         pthread_mutex_unlock(&g_lock);
-        meter_save_all();
+        bool saved = meter_save_all();
         meter_write_ram_json();
-        snprintf(resp, resp_sz, "{\"ok\":true}");
+        reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "reboot_now") == 0) {
         int64_t cd = 3;
         json_get_i64(req, "countdown_s", &cd);
@@ -232,10 +249,12 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
             g_config.main_alert_flags = 0;
         }
         pthread_mutex_unlock(&g_lock);
-        meter_save_all();
+        bool saved = meter_save_all();
         meter_write_ram_json();
         json_get_bool(req, "test", &test);
-        if (test) {
+        if (!saved) {
+            reply_save_result(resp, resp_sz, false);
+        } else if (test) {
             char err[128] = {0};
             bool ok = telegram_send_test(err, sizeof(err));
             snprintf(resp, resp_sz, "{\"ok\":%s,\"msg\":\"%s\"}",
@@ -248,24 +267,25 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
         bool auto_chk = true;
         bool has_auto = json_get_bool(req, "ota_auto_check", &auto_chk);
         bool has_url = json_get_str(req, "ota_version_url", url, sizeof(url));
+        bool saved = true;
         if (has_url || has_auto) {
             pthread_mutex_lock(&g_lock);
             if (has_url) snprintf(g_config.ota_version_url, sizeof(g_config.ota_version_url), "%s", url);
             if (has_auto) g_config.ota_auto_check_enabled = auto_chk;
             pthread_mutex_unlock(&g_lock);
-            meter_save_all();
+            saved = meter_save_all();
             meter_write_ram_json();
         }
-        snprintf(resp, resp_sz, "{\"ok\":true}");
+        reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "sys_opts_save") == 0) {
         bool obs = false, ota_auto = true;
         pthread_mutex_lock(&g_lock);
         if (json_get_bool(req, "observer_mode", &obs)) g_config.observer_mode_enabled = obs;
         if (json_get_bool(req, "ota_auto_check", &ota_auto)) g_config.ota_auto_check_enabled = ota_auto;
         pthread_mutex_unlock(&g_lock);
-        meter_save_all();
+        bool saved = meter_save_all();
         meter_write_ram_json();
-        snprintf(resp, resp_sz, "{\"ok\":true}");
+        reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "tg_alerts_save") == 0) {
         char arr[RMETER_MAX_THRESHOLDS][256];
         memset(arr, 0, sizeof(arr));
@@ -284,13 +304,13 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
                 }
             }
         }
-        meter_save_all();
+        bool saved = meter_save_all();
         meter_write_ram_json();
-        snprintf(resp, resp_sz, "{\"ok\":true}");
+        reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "flush_save") == 0) {
-        meter_save_all();
+        bool saved = meter_save_all();
         meter_write_ram_json();
-        snprintf(resp, resp_sz, "{\"ok\":true}");
+        reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "fazakkir_reload") == 0) {
         fazakkir_reload();
         snprintf(resp, resp_sz, "{\"ok\":true}");
@@ -405,7 +425,7 @@ int main(void) {
         fazakkir_tick(now);
         meter_write_ram_json();
 
-        if (g_flash_dirty && (now - last_save >= 60)) {
+        if (g_flash_dirty && (now - last_save >= 180)) {
             meter_save_all();
             last_save = now;
         }
