@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 
-PROJ=/mnt/c/Users/Mohamed/Desktop/tplink/wr740n_custom
-OUT=/mnt/c/Users/Mohamed/Desktop/tplink/output
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PROJ="$ROOT/wr740n_custom"
+OUT="$ROOT/output"
 IB=/home/lpl2/wr740n_build/openwrt-imagebuilder-18.06.9-ar71xx-tiny.Linux-x86_64
 STAGE=/tmp/rmeter_rootfs
 
@@ -24,9 +25,9 @@ gcc -O2 -Wall -Wextra -std=gnu99 -I"$PROJ/src" \
 /tmp/test_meter_fw
 
 echo "=== 2. Checking Web UI index.html ==="
-python3 - <<'PY'
-import html.parser, re
-p = "/mnt/c/Users/Mohamed/Desktop/tplink/wr740n_custom/files/www/index.html"
+PROJ="$PROJ" python3 - <<'PY'
+import html.parser, os, re
+p = os.environ["PROJ"] + "/files/www/index.html"
 data = open(p, encoding="utf-8").read()
 assert "<script>" in data and "</script>" in data
 assert "action=ota_upload" in data and "api('net_save'" in data

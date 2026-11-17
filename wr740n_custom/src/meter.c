@@ -118,6 +118,34 @@ static bool is_ipv4_str(const char *ip) {
     return (a | b | c | d) != 0;
 }
 
+static pthread_mutex_t s_save_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t s_fw_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void sanitize_device_name(char *s) {
+    if (!s) return;
+    for (; *s; s++) {
+        if (*s == '|') *s = '/';
+        else if (*s == '\r' || *s == '\n') *s = ' ';
+    }
+}
+
+static int find_evictable_device(void) {
+    int best = -1;
+    time_t best_seen = 0;
+    for (int i = 0; i < g_device_count; i++) {
+        rmeter_device_t *d = &g_devices[i];
+        if (d->online || d->quota_bytes > 0 || d->blocked || d->gaming_mode ||
+            d->bound_ip[0] || d->tg_chat_id[0] || d->cap_up_kbps > 0 || d->cap_down_kbps > 0) {
+            continue;
+        }
+        if (best < 0 || d->last_seen < best_seen) {
+            best = i;
+            best_seen = d->last_seen;
+        }
+    }
+    return best;
+}
+
 static int ensure_device(const char *mac, const char *ip, const char *hostname) {
     char m[18];
     norm_mac(mac, m, sizeof(m));
@@ -128,7 +156,14 @@ static int ensure_device(const char *mac, const char *ip, const char *hostname) 
 
     int idx = meter_find_by_mac(m);
     if (idx < 0) {
-        if (g_device_count >= RMETER_MAX_DEVICES) return -1;
+        if (g_device_count >= RMETER_MAX_DEVICES) {
+            int ev = find_evictable_device();
+            if (ev < 0) return -1;
+            for (int i = ev; i + 1 < g_device_count; i++) {
+                g_devices[i] = g_devices[i + 1];
+            }
+            g_device_count--;
+        }
         idx = g_device_count++;
         memset(&g_devices[idx], 0, sizeof(rmeter_device_t));
         snprintf(g_devices[idx].mac, sizeof(g_devices[idx].mac), "%s", m);
@@ -147,6 +182,7 @@ static int ensure_device(const char *mac, const char *ip, const char *hostname) 
     }
     if (hostname && hostname[0] && strcmp(hostname, "*") != 0 && g_devices[idx].name[0] == '\0') {
         snprintf(g_devices[idx].name, sizeof(g_devices[idx].name), "%s", hostname);
+        sanitize_device_name(g_devices[idx].name);
     }
     return idx;
 }
@@ -172,9 +208,22 @@ static void init_default_config(void) {
     g_config.ota_auto_check_enabled = true;
 }
 
+static const char *flash_dir(void) {
+    const char *env = getenv("RMETER_FLASH_DIR");
+    return (env && env[0]) ? env : "/etc/rmeter";
+}
+
+static void flash_path(char *out, size_t sz, const char *name) {
+    snprintf(out, sz, "%s/%s", flash_dir(), name);
+}
+
 void meter_load_all(void) {
     init_default_config();
-    FILE *fp = fopen(RMETER_CFG_FLASH, "r");
+    char p_cfg[160], p_alerts[160], p_db[160];
+    flash_path(p_cfg, sizeof(p_cfg), "config.conf");
+    flash_path(p_alerts, sizeof(p_alerts), "tg_alerts.conf");
+    flash_path(p_db, sizeof(p_db), "devices.db");
+    FILE *fp = fopen(p_cfg, "r");
     if (fp) {
         char line[384];
         while (fgets(line, sizeof(line), fp)) {
@@ -212,7 +261,7 @@ void meter_load_all(void) {
         fclose(fp);
     }
 
-    fp = fopen(RMETER_TG_ALERTS_FLASH, "r");
+    fp = fopen(p_alerts, "r");
     if (fp) {
         char line[768];
         while (fgets(line, sizeof(line), fp)) {
@@ -243,7 +292,7 @@ void meter_load_all(void) {
     }
 
     g_device_count = 0;
-    fp = fopen(RMETER_STATE_FLASH, "r");
+    fp = fopen(p_db, "r");
     if (fp) {
         char line[512];
         while (fgets(line, sizeof(line), fp) && g_device_count < RMETER_MAX_DEVICES) {
@@ -292,6 +341,7 @@ void meter_load_all(void) {
 static bool commit_tmp_file(FILE *fp, const char *tmp_path, const char *dst_path) {
     if (!fp) return false;
     bool ok = (fflush(fp) == 0 && !ferror(fp));
+    if (ok) fsync(fileno(fp));
     if (fclose(fp) != 0) ok = false;
     if (ok && rename(tmp_path, dst_path) != 0) ok = false;
     if (!ok) remove(tmp_path);
@@ -299,7 +349,8 @@ static bool commit_tmp_file(FILE *fp, const char *tmp_path, const char *dst_path
 }
 
 void meter_save_all(void) {
-    mkdir("/etc/rmeter", 0755);
+    const char *fdir = flash_dir();
+    mkdir(fdir, 0755);
 
     rmeter_config_t *snap_cfg = malloc(sizeof(rmeter_config_t));
     rmeter_device_t *snap_devs = malloc(sizeof(rmeter_device_t) * RMETER_MAX_DEVICES);
@@ -309,6 +360,7 @@ void meter_save_all(void) {
         return;
     }
 
+    pthread_mutex_lock(&s_save_lock);
     pthread_mutex_lock(&g_lock);
     *snap_cfg = g_config;
     int snap_cnt = g_device_count;
@@ -326,8 +378,9 @@ void meter_save_all(void) {
     pthread_mutex_unlock(&g_lock);
 
     bool write_err = false;
-    char tmp_cfg[128];
-    snprintf(tmp_cfg, sizeof(tmp_cfg), "%s.tmp", RMETER_CFG_FLASH);
+    char p_cfg[160], tmp_cfg[176];
+    flash_path(p_cfg, sizeof(p_cfg), "config.conf");
+    snprintf(tmp_cfg, sizeof(tmp_cfg), "%s.tmp", p_cfg);
     FILE *fp = fopen(tmp_cfg, "w");
     if (fp) {
         fprintf(fp, "main_quota_bytes=%llu\n", (unsigned long long)snap_cfg->main_quota_bytes);
@@ -353,11 +406,14 @@ void meter_save_all(void) {
         fprintf(fp, "ota_version_url=%s\n", snap_cfg->ota_version_url);
         fprintf(fp, "observer_mode_enabled=%d\n", snap_cfg->observer_mode_enabled ? 1 : 0);
         fprintf(fp, "ota_auto_check_enabled=%d\n", snap_cfg->ota_auto_check_enabled ? 1 : 0);
-        if (!commit_tmp_file(fp, tmp_cfg, RMETER_CFG_FLASH)) write_err = true;
+        if (!commit_tmp_file(fp, tmp_cfg, p_cfg)) write_err = true;
+    } else {
+        write_err = true;
     }
 
-    char tmp_alerts[128];
-    snprintf(tmp_alerts, sizeof(tmp_alerts), "%s.tmp", RMETER_TG_ALERTS_FLASH);
+    char p_alerts[160], tmp_alerts[176];
+    flash_path(p_alerts, sizeof(p_alerts), "tg_alerts.conf");
+    snprintf(tmp_alerts, sizeof(tmp_alerts), "%s.tmp", p_alerts);
     fp = fopen(tmp_alerts, "w");
     if (fp) {
         for (int i = 0; i < RMETER_MAX_THRESHOLDS; i++) {
@@ -372,11 +428,14 @@ void meter_save_all(void) {
             }
             fputc('\n', fp);
         }
-        if (!commit_tmp_file(fp, tmp_alerts, RMETER_TG_ALERTS_FLASH)) write_err = true;
+        if (!commit_tmp_file(fp, tmp_alerts, p_alerts)) write_err = true;
+    } else {
+        write_err = true;
     }
 
-    char tmp_db[128];
-    snprintf(tmp_db, sizeof(tmp_db), "%s.tmp", RMETER_STATE_FLASH);
+    char p_db[160], tmp_db[176];
+    flash_path(p_db, sizeof(p_db), "devices.db");
+    snprintf(tmp_db, sizeof(tmp_db), "%s.tmp", p_db);
     fp = fopen(tmp_db, "w");
     if (fp) {
         for (int i = 0; i < snap_cnt; i++) {
@@ -395,7 +454,9 @@ void meter_save_all(void) {
                     d->tg_chat_id,
                     d->speed_unlocked ? 1 : 0);
         }
-        if (!commit_tmp_file(fp, tmp_db, RMETER_STATE_FLASH)) write_err = true;
+        if (!commit_tmp_file(fp, tmp_db, p_db)) write_err = true;
+    } else {
+        write_err = true;
     }
 
     if (write_err) {
@@ -403,6 +464,7 @@ void meter_save_all(void) {
         g_flash_dirty = true;
         pthread_mutex_unlock(&g_lock);
     }
+    pthread_mutex_unlock(&s_save_lock);
 
     free(snap_cfg);
     free(snap_devs);
@@ -775,16 +837,32 @@ void meter_tick(double dt_sec) {
         refresh_net_meta();
     }
 
-    if (g_fw_dirty) {
-        fw_sync_blocks_and_vip(g_devices, g_device_count);
-        g_fw_dirty = false;
-    }
-    if (g_tc_dirty) {
-        fw_apply_tc(g_devices, g_device_count, g_lan_if, g_wan_if, g_config.wan_down_kbps, g_config.wan_up_kbps);
-        g_tc_dirty = false;
+    bool do_fw = g_fw_dirty;
+    bool do_tc = g_tc_dirty;
+    g_fw_dirty = false;
+    g_tc_dirty = false;
+
+    rmeter_device_t fw_snap[RMETER_MAX_DEVICES];
+    int fw_cnt = 0;
+    char lan_if_snap[32] = {0}, wan_if_snap[32] = {0};
+    uint32_t wan_dl_snap = 0, wan_ul_snap = 0;
+    if (do_fw || do_tc) {
+        fw_cnt = g_device_count;
+        if (fw_cnt > 0) memcpy(fw_snap, g_devices, sizeof(rmeter_device_t) * (size_t)fw_cnt);
+        snprintf(lan_if_snap, sizeof(lan_if_snap), "%s", g_lan_if);
+        snprintf(wan_if_snap, sizeof(wan_if_snap), "%s", g_wan_if);
+        wan_dl_snap = g_config.wan_down_kbps;
+        wan_ul_snap = g_config.wan_up_kbps;
     }
 
     pthread_mutex_unlock(&g_lock);
+
+    if (do_fw || do_tc) {
+        pthread_mutex_lock(&s_fw_lock);
+        if (do_fw) fw_sync_blocks_and_vip(fw_snap, fw_cnt);
+        if (do_tc) fw_apply_tc(fw_snap, fw_cnt, lan_if_snap, wan_if_snap, wan_dl_snap, wan_ul_snap);
+        pthread_mutex_unlock(&s_fw_lock);
+    }
 }
 
 static void read_sys_stats(unsigned long *uptime_s, unsigned long *ram_total_kb, unsigned long *ram_free_kb,
@@ -1059,6 +1137,7 @@ bool meter_set_device_name(const char *mac, const char *name) {
     int idx = meter_find_by_mac_or_ip(mac);
     if (idx < 0) { pthread_mutex_unlock(&g_lock); return false; }
     snprintf(g_devices[idx].name, sizeof(g_devices[idx].name), "%s", name ? name : "");
+    sanitize_device_name(g_devices[idx].name);
     g_flash_dirty = true;
     pthread_mutex_unlock(&g_lock);
     return true;

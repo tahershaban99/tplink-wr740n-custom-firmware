@@ -1620,7 +1620,8 @@ function renderDevices(force){
 async function saveRow(mac){
   const d=S.devices.find(x=>x.mac===mac);if(!d)return;
   const v=devVals(d);
-  await api('device_save',{mac,name:String(v.name).trim(),quota_bytes:Math.round((parseFloat(v.quota)||0)*gbUnit()),cap_down_kbps:Math.round((parseFloat(v.capD)||0)*1000),cap_up_kbps:Math.round((parseFloat(v.capU)||0)*1000),bound_ip:String(v.ip).trim(),tg_chat_id:String(v.tg).trim()});
+  const r=await api('device_save',{mac,name:String(v.name).trim(),quota_bytes:Math.round((parseFloat(v.quota)||0)*gbUnit()),cap_down_kbps:Math.round((parseFloat(v.capD)||0)*1000),cap_up_kbps:Math.round((parseFloat(v.capU)||0)*1000),bound_ip:String(v.ip).trim(),tg_chat_id:String(v.tg).trim()});
+  if(!r||!r.ok){toast((r&&(r.msg||r.error))||'فشل حفظ بيانات الجهاز');return;}
   delete dirtyMap[mac];
   document.querySelectorAll('[data-mac="'+mac+'"] .dirty').forEach(e=>e.classList.remove('dirty'));
   toast('تم حفظ بيانات الجهاز');await poll();
@@ -1633,19 +1634,21 @@ async function addGb(mac,gb){
   if(qi&&document.activeElement===qi)qi.blur();
   toast('تمت إضافة '+gb+' GB');await poll();
 }
-async function togBlk(mac,blk){await api('device_block',{mac,blocked:blk});toast(blk?'تم الحظر':'تم فك الحظر');await poll();}
-async function togVip(mac,vip){await api('device_gaming',{mac,gaming_mode:vip});toast(vip?'تم تفعيل VIP':'تم إلغاء VIP');await poll();}
-async function togUnlim(mac,unl){await api('device_speed_unlock',{mac,speed_unlocked:unl});toast(unl?'🚀 تم فتح السرعة الكاملة للجهاز':'🔒 تم إعادة تطبيق السرعة المحددة');await poll();}
-async function rstDev(mac){if(!confirm('تصفير عداد هذا الجهاز؟'))return;await api('device_reset',{mac});toast('تم التصفير');await poll();}
-async function delDev(mac){if(!confirm('حذف هذا الجهاز وتصفير إعداداته؟'))return;await api('device_delete',{mac});delete dirtyMap[mac];delete openPin[mac];toast('تم حذف الجهاز');await poll();}
-async function resetAllUsage(){if(!confirm('تصفير استهلاك كل الأجهزة؟'))return;await api('meter_reset_all',{});toast('تم تصفير جميع العدادات');await poll();}
+async function togBlk(mac,blk){const r=await api('device_block',{mac,blocked:blk});if(!r||!r.ok){toast((r&&(r.msg||r.error))||'تعذر تنفيذ الحظر');return;}toast(blk?'تم الحظر':'تم فك الحظر');await poll();}
+async function togVip(mac,vip){const r=await api('device_gaming',{mac,gaming_mode:vip});if(!r||!r.ok){toast((r&&(r.msg||r.error))||'تعذر تغيير VIP');return;}toast(vip?'تم تفعيل VIP':'تم إلغاء VIP');await poll();}
+async function togUnlim(mac,unl){const r=await api('device_speed_unlock',{mac,speed_unlocked:unl});if(!r||!r.ok){toast((r&&(r.msg||r.error))||'تعذر تغيير حالة السرعة');return;}toast(unl?'🚀 تم فتح السرعة الكاملة للجهاز':'🔒 تم إعادة تطبيق السرعة المحددة');await poll();}
+async function rstDev(mac){if(!confirm('تصفير عداد هذا الجهاز؟'))return;const r=await api('device_reset',{mac});if(!r||!r.ok){toast((r&&(r.msg||r.error))||'تعذر التصفير');return;}toast('تم التصفير');await poll();}
+async function delDev(mac){if(!confirm('حذف هذا الجهاز وتصفير إعداداته؟'))return;const r=await api('device_delete',{mac});if(!r||!r.ok){toast((r&&(r.msg||r.error))||'تعذر الحذف');return;}delete dirtyMap[mac];delete openPin[mac];toast('تم حذف الجهاز');await poll();}
+async function resetAllUsage(){if(!confirm('تصفير استهلاك كل الأجهزة؟'))return;const r=await api('meter_reset_all',{});if(!r||!r.ok){toast((r&&(r.msg||r.error))||'تعذر التصفير');return;}toast('تم تصفير جميع العدادات');await poll();}
 
 async function saveMainQuota(){
-  await api('main_quota',{main_quota_bytes:Math.round((parseFloat($('qMainGb').value)||0)*gbUnit()),start_date:$('qStart').value,end_date:$('qEnd').value,period_days:parseInt($('qDays').value)||30,wan_down_kbps:Math.round((parseFloat($('qWanD').value)||0)*1000),wan_up_kbps:Math.round((parseFloat($('qWanU').value)||0)*1000)});
+  const r=await api('main_quota',{main_quota_bytes:Math.round((parseFloat($('qMainGb').value)||0)*gbUnit()),start_date:$('qStart').value,end_date:$('qEnd').value,period_days:parseInt($('qDays').value)||30,wan_down_kbps:Math.round((parseFloat($('qWanD').value)||0)*1000),wan_up_kbps:Math.round((parseFloat($('qWanU').value)||0)*1000)});
+  if(!r||!r.ok){toast((r&&(r.msg||r.error))||'فشل حفظ الباقة الرئيسية');return;}
   toast('تم حفظ الباقة الرئيسية وإعدادات السرعة');poll();
 }
 async function saveMeterScale(){
-  await api('meter_scale',{gb_standard:parseInt($('qStd').value),scale_pct:parseInt($('qPct').value),scale_mode:parseInt($('qMode').value)});
+  const r=await api('meter_scale',{gb_standard:parseInt($('qStd').value),scale_pct:parseInt($('qPct').value),scale_mode:parseInt($('qMode').value)});
+  if(!r||!r.ok){toast((r&&(r.msg||r.error))||'فشل حفظ المعايرة');return;}
   toast('تم حفظ المعايرة');poll();
 }
 function toggleWanFields(){
@@ -1684,6 +1687,7 @@ async function loadNetInfo(){
 }
 async function saveNetInfo(){
   const r=await api('net_save',{ssid:$('wSsid').value,key:$('wKey').value,encryption:$('wEnc').value,channel:$('wChan').value,htmode:$('wHt').value,txpower:$('wTxp').value,country:$('wCountry').value,wifi_disabled:$('wDis').checked,wan_proto:$('wanProto').value,wan_ip:$('wanIp').value,wan_mask:$('wanMask').value,wan_gw:$('wanGw').value,wan_dns:$('wanDns').value,wan_user:$('wanUser').value,wan_pass:$('wanPass').value});
+  if(!r||!r.ok){toast((r&&(r.msg||r.error))||'فشل حفظ إعدادات الوايفاي والإنترنت');return;}
   toast(r.msg||'تم تطبيق إعدادات الوايفاي والإنترنت');
 }
 async function saveLanDhcp(){
@@ -1794,7 +1798,7 @@ async function saveFazakkir(){
     cards:fzCards.filter(c=>c.text.trim()).map(c=>({text:c.text.trim(),enabled:c.enabled!==false,max_daily:parseInt(c.max_daily,10)||0}))
   };
   const r=await api('fazakkir_save',payload);
-  toast(r.ok?'تم حفظ وتطبيق إعدادات فذكر':'حدث خطأ أثناء الحفظ');
+  toast(r&&r.ok?'تم حفظ وتطبيق إعدادات فذكر':((r&&(r.msg||r.error))||'حدث خطأ أثناء الحفظ'));
 }
 async function refreshPrayers(){
   await saveFazakkir();
@@ -1861,12 +1865,12 @@ async function resetTgAlerts(){if(!confirm('مسح جميع القوالب ال�
 function autoTz(){const tz=Math.round(-new Date().getTimezoneOffset()/60);$('rbTz').value=tz;toast('تم ضبط المنطقة الزمنية على UTC'+(tz>=0?'+':'')+tz);}
 async function syncNtp(){toast('جاري مزامنة الوقت عبر الإنترنت...');const r=await api('ntp_sync',{});toast(r.msg||r.error||(r.ok?'تمت المزامنة':'فشلت المزامنة'));poll();}
 async function saveSysOpts(){const r=await api('sys_opts_save',{observer_mode:$('obsMode').checked,ota_auto_check:$('otaAutoChk').checked});toast(r.msg||(r.ok?'تم حفظ خيارات النظام':'فشل الحفظ'));poll();}
-async function saveAutoReboot(){await api('auto_reboot',{enabled:$('rbEn').checked,hour:parseInt($('rbHr').value)||0,min:parseInt($('rbMn').value)||0,tz:parseInt($('rbTz').value)||0});toast('تم حفظ جدولة إعادة التشغيل');poll();}
+async function saveAutoReboot(){const r=await api('auto_reboot',{enabled:$('rbEn').checked,hour:parseInt($('rbHr').value)||0,min:parseInt($('rbMn').value)||0,tz:parseInt($('rbTz').value)||0});if(!r||!r.ok){toast((r&&(r.msg||r.error))||'فشل حفظ الجدولة');return;}toast('تم حفظ جدولة إعادة التشغيل');poll();}
 async function rebootNow(){if(!confirm('إعادة تشغيل الراوتر الآن؟'))return;await api('reboot_now',{countdown_s:3});toast('جاري إعادة التشغيل...');poll();}
 async function rebootCountdownMin(){const m=parseInt($('rbCdMin').value,10)||1;await api('reboot_now',{countdown_s:m*60});toast('سيعاد التشغيل بعد '+m+' دقيقة');poll();}
 async function cancelRebootTimer(){await api('reboot_now',{countdown_s:-1});toast('تم إلغاء مؤقت إعادة التشغيل');poll();}
 async function changePass(){const r=await api('password',{old_password:$('pOld').value,new_username:$('pUser').value.trim(),new_password:$('pNew').value});if(r.ok){toast('تم تحديث بيانات الدخول');$('pOld').value='';$('pNew').value='';}else toast(r.error||'فشل التحديث');}
-async function saveOtaUrl(){await api('ota_save',{ota_version_url:$('otaVerUrl').value.trim(),ota_auto_check:$('otaAutoChk').checked});toast('تم حفظ رابط التحقق');}
+async function saveOtaUrl(){const r=await api('ota_save',{ota_version_url:$('otaVerUrl').value.trim(),ota_auto_check:$('otaAutoChk').checked});if(!r||!r.ok){toast((r&&(r.msg||r.error))||'فشل الحفظ');return;}toast('تم حفظ رابط التحقق');}
 async function checkOta(){
   $('otaRes').textContent='جاري الفحص...';
   const r=await api('ota_check',{url:$('otaVerUrl').value.trim()});

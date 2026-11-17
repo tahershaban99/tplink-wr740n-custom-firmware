@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include "../src/rmeter.h"
 #include "../src/json_util.h"
 #include "../src/meter.h"
@@ -5,6 +6,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Stub firewall & telegram functions for unit testing meter logic in memory */
@@ -197,11 +199,51 @@ static void test_meter_save_all_snapshot_concurrent(void) {
     printf("[PASS] test_meter_save_all_snapshot_concurrent\n");
 }
 
+static void *concurrent_saver_worker(void *arg) {
+    (void)arg;
+    for (int i = 0; i < 20; i++) {
+        meter_save_all();
+    }
+    return NULL;
+}
+
+static void test_regression_fixes(void) {
+    /* 1. json_get_str_array for tg_alerts_save */
+    const char *req = "{\"action\":\"tg_alerts_save\",\"tg_alert_msgs\":[\"Alert 50%\",\"Line1\\nLine2\",\"\\u062a\\u0646\\u0628\\u064a\\u0647\"]}";
+    char msgs[8][256];
+    memset(msgs, 0, sizeof(msgs));
+    int n = json_get_str_array(req, "tg_alert_msgs", (char *)msgs, sizeof(msgs[0]), 8);
+    assert(n == 3);
+    assert(strcmp(msgs[0], "Alert 50%") == 0);
+    assert(strcmp(msgs[1], "Line1\nLine2") == 0);
+    assert(strcmp(msgs[2], "تنبيه") == 0);
+
+    /* 2. Pipe sanitization in device names */
+    pthread_mutex_lock(&g_lock);
+    g_device_count = 1;
+    memset(&g_devices[0], 0, sizeof(g_devices[0]));
+    snprintf(g_devices[0].mac, sizeof(g_devices[0].mac), "AA:BB:CC:11:22:33");
+    pthread_mutex_unlock(&g_lock);
+    assert(meter_set_device_name("AA:BB:CC:11:22:33", "Phone|Test\n1"));
+    assert(strchr(g_devices[0].name, '|') == NULL);
+    assert(strchr(g_devices[0].name, '\n') == NULL);
+
+    /* 3. Two threads calling meter_save_all concurrently */
+    pthread_t t1, t2;
+    assert(pthread_create(&t1, NULL, concurrent_saver_worker, NULL) == 0);
+    assert(pthread_create(&t2, NULL, concurrent_saver_worker, NULL) == 0);
+    pthread_join(t1, NULL);
+    pthread_join(t2, NULL);
+    printf("[PASS] test_regression_fixes\n");
+}
+
 int main(void) {
+    setenv("RMETER_FLASH_DIR", "/tmp/rmeter_test_flash", 1);
     test_json_util();
     test_meter_scaling_and_quota();
     test_alert_templates_and_flags();
     test_meter_save_all_snapshot_concurrent();
+    test_regression_fixes();
     printf("ALL UNIT TESTS PASSED\n");
     return 0;
 }

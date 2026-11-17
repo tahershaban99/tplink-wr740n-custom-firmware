@@ -319,40 +319,58 @@ static void handle_net_save(const char *body) {
     char ssid[64] = {0}, key[96] = {0}, enc[32] = {0}, chan[16] = {0}, ht[16] = {0}, txp[16] = {0}, country[8] = {0};
     bool wifi_dis = false;
     bool has_dis = json_get_bool(body, "wifi_disabled", &wifi_dis);
+    bool has_ssid = json_get_str(body, "ssid", ssid, sizeof(ssid));
+    bool has_key  = json_get_str(body, "key", key, sizeof(key));
+    bool has_enc  = json_get_str(body, "encryption", enc, sizeof(enc));
+    bool has_chan = json_get_str(body, "channel", chan, sizeof(chan));
+    bool has_ht   = json_get_str(body, "htmode", ht, sizeof(ht));
+    bool has_txp  = json_get_str(body, "txpower", txp, sizeof(txp));
+    bool has_ctry = json_get_str(body, "country", country, sizeof(country));
+
+    if ((has_ssid && !safe_uci_str(ssid)) || (has_key && !safe_uci_str(key))) {
+        send_json_hdr(NULL);
+        printf("{\"ok\":false,\"msg\":\"اسم الشبكة أو كلمة السر يحتوي على رموز غير مسموحة\"}\n");
+        return;
+    }
+    if (has_key && key[0] && strlen(key) < 8 && strcmp(enc, "none") != 0) {
+        send_json_hdr(NULL);
+        printf("{\"ok\":false,\"msg\":\"كلمة سر الوايفاي يجب أن تكون 8 أحرف على الأقل\"}\n");
+        return;
+    }
 
     char cmd[512];
-    if (json_get_str(body, "ssid", ssid, sizeof(ssid)) && ssid[0] && safe_uci_str(ssid)) {
+    if (has_ssid && ssid[0]) {
         snprintf(cmd, sizeof(cmd), "uci set wireless.default_radio0.ssid='%s'", ssid);
         system(cmd);
     }
-    if (json_get_str(body, "key", key, sizeof(key)) && safe_uci_str(key)) {
-        if (strlen(key) >= 8) {
+    if (has_key) {
+        if (strcmp(enc, "none") == 0 && !key[0]) {
+            system("uci -q delete wireless.default_radio0.key || true");
+        } else if (strlen(key) >= 8) {
             snprintf(cmd, sizeof(cmd), "uci set wireless.default_radio0.key='%s'", key);
             system(cmd);
         }
     }
-    if (json_get_str(body, "encryption", enc, sizeof(enc)) && enc[0] && safe_uci_str(enc)) {
+    if (has_enc && enc[0] && safe_uci_str(enc)) {
         snprintf(cmd, sizeof(cmd), "uci set wireless.default_radio0.encryption='%s'", enc);
         system(cmd);
     }
-    if (json_get_str(body, "channel", chan, sizeof(chan)) && chan[0] && safe_uci_str(chan)) {
+    if (has_chan && chan[0] && safe_uci_str(chan)) {
         snprintf(cmd, sizeof(cmd), "uci set wireless.radio0.channel='%s'", chan);
         system(cmd);
     }
-    if (json_get_str(body, "htmode", ht, sizeof(ht)) && ht[0] && safe_uci_str(ht)) {
+    if (has_ht && ht[0] && safe_uci_str(ht)) {
         snprintf(cmd, sizeof(cmd), "uci set wireless.radio0.htmode='%s'", ht);
         system(cmd);
         snprintf(cmd, sizeof(cmd), "uci set wireless.radio0.noscan='%s'",
                  (strcmp(ht, "HT40") == 0) ? "1" : "0");
         system(cmd);
     }
-    if (json_get_str(body, "country", country, sizeof(country)) &&
-        strlen(country) == 2 && isupper((unsigned char)country[0]) && isupper((unsigned char)country[1])) {
+    if (has_ctry && strlen(country) == 2 && isupper((unsigned char)country[0]) && isupper((unsigned char)country[1])) {
         snprintf(cmd, sizeof(cmd), "uci set wireless.radio0.country='%s'", country);
         system(cmd);
     }
-    system("uci set wireless.radio0.legacy_rates='0'");
-    if (json_get_str(body, "txpower", txp, sizeof(txp)) && safe_uci_str(txp)) {
+    if (has_txp && safe_uci_str(txp)) {
         if (txp[0]) snprintf(cmd, sizeof(cmd), "uci set wireless.radio0.txpower='%s'", txp);
         else snprintf(cmd, sizeof(cmd), "uci -q delete wireless.radio0.txpower || true");
         system(cmd);
@@ -362,37 +380,63 @@ static void handle_net_save(const char *body) {
         system(cmd);
     }
 
+    bool wifi_changed = has_dis || (has_ssid && ssid[0]) || has_key || (has_enc && enc[0]) ||
+                        (has_chan && chan[0]) || (has_ht && ht[0]) || has_ctry || has_txp;
+    if (wifi_changed) {
+        system("uci set wireless.radio0.legacy_rates='0'");
+    }
+
     char proto[24] = {0}, wip[24] = {0}, wmask[24] = {0}, wgw[24] = {0}, wdns[64] = {0}, wuser[64] = {0}, wpass[64] = {0};
     bool wan_changed = false;
     if (json_get_str(body, "wan_proto", proto, sizeof(proto)) && proto[0] && safe_uci_str(proto)) {
-        snprintf(cmd, sizeof(cmd), "uci set network.wan.proto='%s'", proto);
-        system(cmd);
-        wan_changed = true;
+        char cur_proto[24] = {0};
+        read_uci_val("network.wan.proto", cur_proto, sizeof(cur_proto));
+        if (strcmp(cur_proto, proto) != 0) {
+            snprintf(cmd, sizeof(cmd), "uci set network.wan.proto='%s'", proto);
+            system(cmd);
+            wan_changed = true;
+        }
     }
     if (json_get_str(body, "wan_ip", wip, sizeof(wip)) && safe_uci_str(wip)) {
-        if (wip[0]) { snprintf(cmd, sizeof(cmd), "uci set network.wan.ipaddr='%s'", wip); system(cmd); }
+        if (wip[0]) {
+            char cur[24] = {0}; read_uci_val("network.wan.ipaddr", cur, sizeof(cur));
+            if (strcmp(cur, wip) != 0) { snprintf(cmd, sizeof(cmd), "uci set network.wan.ipaddr='%s'", wip); system(cmd); wan_changed = true; }
+        }
     }
     if (json_get_str(body, "wan_mask", wmask, sizeof(wmask)) && safe_uci_str(wmask)) {
-        if (wmask[0]) { snprintf(cmd, sizeof(cmd), "uci set network.wan.netmask='%s'", wmask); system(cmd); }
+        if (wmask[0]) {
+            char cur[24] = {0}; read_uci_val("network.wan.netmask", cur, sizeof(cur));
+            if (strcmp(cur, wmask) != 0) { snprintf(cmd, sizeof(cmd), "uci set network.wan.netmask='%s'", wmask); system(cmd); wan_changed = true; }
+        }
     }
     if (json_get_str(body, "wan_gw", wgw, sizeof(wgw)) && safe_uci_str(wgw)) {
-        if (wgw[0]) { snprintf(cmd, sizeof(cmd), "uci set network.wan.gateway='%s'", wgw); system(cmd); }
+        if (wgw[0]) {
+            char cur[24] = {0}; read_uci_val("network.wan.gateway", cur, sizeof(cur));
+            if (strcmp(cur, wgw) != 0) { snprintf(cmd, sizeof(cmd), "uci set network.wan.gateway='%s'", wgw); system(cmd); wan_changed = true; }
+        }
     }
     if (json_get_str(body, "wan_dns", wdns, sizeof(wdns)) && safe_uci_str(wdns)) {
-        if (wdns[0]) { snprintf(cmd, sizeof(cmd), "uci set network.wan.dns='%s'", wdns); system(cmd); }
-        else system("uci -q delete network.wan.dns || true");
+        char cur[64] = {0}; read_uci_val("network.wan.dns", cur, sizeof(cur));
+        if (strcmp(cur, wdns) != 0) {
+            if (wdns[0]) { snprintf(cmd, sizeof(cmd), "uci set network.wan.dns='%s'", wdns); system(cmd); }
+            else system("uci -q delete network.wan.dns || true");
+            wan_changed = true;
+        }
     }
     if (json_get_str(body, "wan_user", wuser, sizeof(wuser)) && safe_uci_str(wuser)) {
-        if (wuser[0]) { snprintf(cmd, sizeof(cmd), "uci set network.wan.username='%s'", wuser); system(cmd); }
+        if (wuser[0]) {
+            char cur[64] = {0}; read_uci_val("network.wan.username", cur, sizeof(cur));
+            if (strcmp(cur, wuser) != 0) { snprintf(cmd, sizeof(cmd), "uci set network.wan.username='%s'", wuser); system(cmd); wan_changed = true; }
+        }
     }
     if (json_get_str(body, "wan_pass", wpass, sizeof(wpass)) && safe_uci_str(wpass)) {
-        if (wpass[0]) { snprintf(cmd, sizeof(cmd), "uci set network.wan.password='%s'", wpass); system(cmd); }
+        if (wpass[0]) { snprintf(cmd, sizeof(cmd), "uci set network.wan.password='%s'", wpass); system(cmd); wan_changed = true; }
     }
 
     char lan_ip[24] = {0}, lan_mask[24] = {0}, d_start[16] = {0}, d_limit[16] = {0}, d_lease[16] = {0}, d_dns[64] = {0};
     bool dhcp_en = true;
     bool has_dhcp_en = json_get_bool(body, "dhcp_enabled", &dhcp_en);
-    bool lan_changed = false, dhcp_changed = false, wifi_changed = has_dis || ssid[0] || key[0] || enc[0] || chan[0] || ht[0] || country[0] || txp[0];
+    bool lan_changed = false, dhcp_changed = false;
 
     if (json_get_str(body, "lan_ip", lan_ip, sizeof(lan_ip)) && lan_ip[0]) {
         if (!valid_ipv4(lan_ip)) {
@@ -467,17 +511,25 @@ static void handle_net_save(const char *body) {
         dhcp_changed = true;
     }
 
+    bool commit_err = false;
     if (wifi_changed) {
-        system("uci commit wireless; (sleep 1; wifi reload) >/dev/null 2>&1 &");
+        if (system("uci commit wireless") != 0) commit_err = true;
+        else system("(sleep 1; wifi reload) >/dev/null 2>&1 &");
     }
     if (wan_changed || lan_changed) {
-        system("uci commit network; (sleep 1; /etc/init.d/network reload) >/dev/null 2>&1 &");
+        if (system("uci commit network") != 0) commit_err = true;
+        else system("(sleep 1; /etc/init.d/network reload) >/dev/null 2>&1 &");
     }
     if (dhcp_changed || lan_changed) {
-        system("uci commit dhcp; (sleep 1; /etc/init.d/dnsmasq restart) >/dev/null 2>&1 &");
+        if (system("uci commit dhcp") != 0) commit_err = true;
+        else system("(sleep 1; /etc/init.d/dnsmasq restart) >/dev/null 2>&1 &");
     }
     send_json_hdr(NULL);
-    printf("{\"ok\":true,\"lan_changed\":%s,\"lan_ip\":\"%s\"}\n", lan_changed ? "true" : "false", lan_ip);
+    if (commit_err) {
+        printf("{\"ok\":false,\"msg\":\"فشل حفظ الإعدادات على الفلاش (تحقق من المساحة المتاحة)\"}\n");
+    } else {
+        printf("{\"ok\":true,\"lan_changed\":%s,\"lan_ip\":\"%s\"}\n", lan_changed ? "true" : "false", lan_ip);
+    }
 }
 
 static void handle_ota_check(const char *body) {
@@ -645,8 +697,13 @@ int main(void) {
         return 0;
     }
 
-    static char body[16384] = {0};
-    if (clen > 0 && clen < (int)sizeof(body)) {
+    static char body[65536] = {0};
+    if (clen >= sizeof(body)) {
+        send_json_hdr(NULL);
+        printf("{\"ok\":false,\"msg\":\"حجم البيانات كبير جداً (%zu بايت)\"}\n", clen);
+        return 0;
+    }
+    if (clen > 0) {
         size_t got = fread(body, 1, clen, stdin);
         body[got] = '\0';
     }
@@ -827,18 +884,27 @@ int main(void) {
     if (strcmp(action, "fazakkir_save") == 0) {
         mkdir("/etc/rmeter", 0755);
         FILE *fp = fopen("/etc/rmeter/fazakkir.json.tmp", "w");
+        bool ok = false;
         if (fp && body[0] == '{') {
-            fputs(body, fp);
+            ok = (fputs(body, fp) != EOF && fflush(fp) == 0 && !ferror(fp));
+            if (ok) fsync(fileno(fp));
+            if (fclose(fp) != 0) ok = false;
+            fp = NULL;
+            if (ok && rename("/etc/rmeter/fazakkir.json.tmp", "/etc/rmeter/fazakkir.json") != 0) {
+                ok = false;
+            }
+        } else if (fp) {
             fclose(fp);
-            rename("/etc/rmeter/fazakkir.json.tmp", "/etc/rmeter/fazakkir.json");
+        }
+        if (ok) {
             char r2[256] = {0};
             send_ipc("{\"action\":\"fazakkir_reload\"}", r2, sizeof(r2));
             send_json_hdr(NULL);
             printf("{\"ok\":true}\n");
         } else {
-            if (fp) fclose(fp);
+            unlink("/etc/rmeter/fazakkir.json.tmp");
             send_json_hdr(NULL);
-            printf("{\"ok\":false,\"msg\":\"تعذر حفظ ملف الإعدادات\"}\n");
+            printf("{\"ok\":false,\"msg\":\"تعذر حفظ ملف الإعدادات (تأكد من مساحة الفلاش)\"}\n");
         }
         return 0;
     }

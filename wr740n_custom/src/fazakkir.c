@@ -154,9 +154,14 @@ static void parse_int_arr(const char *arr, int *out, int count) {
 static void load_cfg_file(void) {
     FILE *fp = fopen(FAZAKKIR_CFG_PATH, "r");
     if (!fp) return;
-    char *buf = malloc(16384);
+    fseek(fp, 0, SEEK_END);
+    long fsz = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    if (fsz <= 0) { fclose(fp); return; }
+    if (fsz > 65535) fsz = 65535;
+    char *buf = malloc((size_t)fsz + 1);
     if (!buf) { fclose(fp); return; }
-    size_t n = fread(buf, 1, 16383, fp);
+    size_t n = fread(buf, 1, (size_t)fsz, fp);
     buf[n] = '\0';
     fclose(fp);
 
@@ -573,6 +578,7 @@ static void apply_prayer_restriction(int p_idx, time_t now) {
             g_devices[idx].cap_up_kbps = lim;
         }
         g_fw_dirty = true;
+        g_tc_dirty = true;
     }
     pthread_mutex_unlock(&g_lock);
 
@@ -598,6 +604,7 @@ static void restore_prayer_restriction(void) {
         g_devices[idx].cap_up_kbps = s_saved[k].was_up;
         g_devices[idx].cap_down_kbps = s_saved[k].was_down;
         g_fw_dirty = true;
+        g_tc_dirty = true;
     }
     pthread_mutex_unlock(&g_lock);
     s_saved_cnt = 0;

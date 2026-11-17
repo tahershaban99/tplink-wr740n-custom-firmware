@@ -98,13 +98,12 @@ static const char *find_json_key(const char *json, const char *key) {
     return NULL;
 }
 
-bool json_get_str(const char *json, const char *key, char *out, size_t out_sz) {
-    if (!out || out_sz == 0) return false;
-    const char *v = find_json_key(json, key);
-    if (!v || *v != '"') return false;
+/* Parse a JSON string starting at opening quote; returns pointer past closing quote (or NULL on failure). */
+static const char *parse_json_str_val(const char *v, char *out, size_t out_sz) {
+    if (!v || *v != '"' || !out || out_sz == 0) return NULL;
     v++;
     size_t j = 0;
-    while (*v && *v != '"' && j + 1 < out_sz) {
+    while (*v && *v != '"') {
         if (*v == '\\' && v[1] != '\0') {
             v++;
             if (*v == 'u') {
@@ -117,25 +116,53 @@ bool json_get_str(const char *json, const char *key, char *out, size_t out_sz) {
                         cp = 0x10000U + (((u1 - 0xD800U) << 10) | (u2 - 0xDC00U));
                         v += 6;
                     }
-                    size_t w = append_utf8_cp(cp, out + j, out_sz - 1 - j);
-                    if (w == 0) break;
-                    j += w;
+                    if (j + 1 < out_sz) {
+                        size_t w = append_utf8_cp(cp, out + j, out_sz - 1 - j);
+                        j += w;
+                    }
                     continue;
                 }
             }
-            if (*v == 'n') out[j++] = '\n';
-            else if (*v == 'r') out[j++] = '\r';
-            else if (*v == 't') out[j++] = '\t';
-            else if (*v == 'b') out[j++] = '\b';
-            else if (*v == 'f') out[j++] = '\f';
-            else out[j++] = *v;
+            char ch = *v;
+            if (ch == 'n') ch = '\n';
+            else if (ch == 'r') ch = '\r';
+            else if (ch == 't') ch = '\t';
+            else if (ch == 'b') ch = '\b';
+            else if (ch == 'f') ch = '\f';
+            if (j + 1 < out_sz) out[j++] = ch;
         } else {
-            out[j++] = *v;
+            if (j + 1 < out_sz) out[j++] = *v;
         }
         v++;
     }
     out[j] = '\0';
-    return true;
+    return (*v == '"') ? (v + 1) : v;
+}
+
+bool json_get_str(const char *json, const char *key, char *out, size_t out_sz) {
+    if (!out || out_sz == 0) return false;
+    const char *v = find_json_key(json, key);
+    return parse_json_str_val(v, out, out_sz) != NULL;
+}
+
+int json_get_str_array(const char *json, const char *key, char *out_flat, size_t item_sz, int max_items) {
+    if (!out_flat || item_sz == 0 || max_items <= 0) return 0;
+    const char *v = find_json_key(json, key);
+    if (!v || *v != '[') return 0;
+    v++;
+    int cnt = 0;
+    while (*v && *v != ']' && cnt < max_items) {
+        while (*v && (isspace((unsigned char)*v) || *v == ',')) v++;
+        if (*v == ']') break;
+        if (*v == '"') {
+            v = parse_json_str_val(v, out_flat + (size_t)cnt * item_sz, item_sz);
+            if (!v) break;
+            cnt++;
+        } else {
+            while (*v && *v != ',' && *v != ']') v++;
+        }
+    }
+    return cnt;
 }
 
 bool json_get_i64(const char *json, const char *key, int64_t *out) {

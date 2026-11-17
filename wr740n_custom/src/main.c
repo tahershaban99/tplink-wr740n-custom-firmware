@@ -267,12 +267,21 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
         meter_write_ram_json();
         snprintf(resp, resp_sz, "{\"ok\":true}");
     } else if (strcmp(action, "tg_alerts_save") == 0) {
-        for (int i = 0; i < RMETER_MAX_THRESHOLDS; i++) {
-            char key[8];
-            char val[256] = {0};
-            snprintf(key, sizeof(key), "m%d", i);
-            if (json_get_str(req, key, val, sizeof(val))) {
-                meter_set_tg_alert_msg(i, val);
+        char arr[RMETER_MAX_THRESHOLDS][256];
+        memset(arr, 0, sizeof(arr));
+        int cnt = json_get_str_array(req, "tg_alert_msgs", (char *)arr, sizeof(arr[0]), RMETER_MAX_THRESHOLDS);
+        if (cnt > 0) {
+            for (int i = 0; i < cnt && i < RMETER_MAX_THRESHOLDS; i++) {
+                meter_set_tg_alert_msg(i, arr[i]);
+            }
+        } else {
+            for (int i = 0; i < RMETER_MAX_THRESHOLDS; i++) {
+                char key[8];
+                char val[256] = {0};
+                snprintf(key, sizeof(key), "m%d", i);
+                if (json_get_str(req, key, val, sizeof(val))) {
+                    meter_set_tg_alert_msg(i, val);
+                }
             }
         }
         meter_save_all();
@@ -383,6 +392,7 @@ int main(void) {
     time_t last_tick = time(NULL);
     time_t last_save = last_tick;
     int last_reboot_day = -1;
+    bool reboot_triggered = false;
 
     while (g_running) {
         sleep(1);
@@ -395,7 +405,7 @@ int main(void) {
         fazakkir_tick(now);
         meter_write_ram_json();
 
-        if (g_flash_dirty && (now - last_save >= 600)) {
+        if (g_flash_dirty && (now - last_save >= 60)) {
             meter_save_all();
             last_save = now;
         }
@@ -406,6 +416,7 @@ int main(void) {
             if (g_reboot_countdown == 0) {
                 meter_save_all();
                 sync();
+                reboot_triggered = true;
                 system("reboot");
                 break;
             }
@@ -424,6 +435,7 @@ int main(void) {
                     if (rf) { fputs("1\n", rf); fclose(rf); }
                     meter_save_all();
                     sync();
+                    reboot_triggered = true;
                     system("reboot");
                     break;
                 }
@@ -431,7 +443,10 @@ int main(void) {
         }
     }
 
-    meter_save_all();
+    if (!reboot_triggered) {
+        meter_save_all();
+        sync();
+    }
     return 0;
 }
 
