@@ -60,7 +60,6 @@ ppp-mod-pppoe - 2.4.7-13
 procd - 2018-03-28-dfb68f85-1
 swconfig - 11
 tc - 4.16.0-8
-uboot-envtools - 2018.03-1
 ubox - 2018-02-14-128bc35f-2
 ubus - 2018-10-06-221ce7e7-1
 ubusd - 2018-10-06-221ce7e7-1

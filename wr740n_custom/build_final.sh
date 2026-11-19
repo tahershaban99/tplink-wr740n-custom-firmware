@@ -59,8 +59,19 @@ python3 - <<'PY' "$STAGE/www/index.html"
 import re, sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
-# Strip HTML comments and leading/trailing whitespace per line to save squashfs/flash space
+# Minify <style> CSS comments/whitespace safely
+def min_css(m):
+    c = re.sub(r'/\*[\s\S]*?\*/', '', m.group(1))
+    c = re.sub(r'\s+', ' ', c)
+    c = re.sub(r'\s*([{:;,}])\s*', r'\1', c)
+    return '<style>' + c.strip() + '</style>'
+s = re.sub(r'<style>([\s\S]*?)</style>', min_css, s)
+# Strip HTML comments and JS /* ... */ block comments
 s = re.sub(r'<!--[\s\S]*?-->', '', s)
+def min_js(m):
+    j = re.sub(r'/\*[\s\S]*?\*/', '', m.group(1))
+    return '<script>' + j + '</script>'
+s = re.sub(r'<script>([\s\S]*?)</script>', min_js, s)
 lines = [ln.strip() for ln in s.splitlines() if ln.strip()]
 out = '\n'.join(lines) + '\n'
 open(p, "w", encoding="utf-8").write(out)
@@ -81,7 +92,7 @@ echo "=== 5. Building Custom OpenWrt 18.06.9 Image ==="
 cd "$IB"
 mkdir -p staging_dir/host tmp
 touch staging_dir/host/.prereq-build
-PKGS="-ip6tables -kmod-ip6tables -kmod-nf-conntrack6 -odhcp6c -odhcpd-ipv6only -luci -opkg uhttpd iwinfo libustream-mbedtls libmbedtls tc kmod-sched-core iptables-mod-ipopt kmod-ipt-ipopt"
+PKGS="-ip6tables -kmod-ip6tables -kmod-nf-conntrack6 -odhcp6c -odhcpd-ipv6only -luci -opkg -uboot-envtools uhttpd iwinfo libustream-mbedtls libmbedtls tc kmod-sched-core iptables-mod-ipopt kmod-ipt-ipopt"
 make image PROFILE=tl-wr740n-v4 PACKAGES="$PKGS" FILES="$STAGE" CONFIG_CLEAN_IPKG=y
 
 echo "=== 6. Exporting Final Images & Checksums ==="

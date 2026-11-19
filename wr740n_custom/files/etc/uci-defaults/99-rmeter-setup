@@ -13,9 +13,10 @@ if [ -f /etc/config/uhttpd ]; then
     uci commit uhttpd
 fi
 
-if ! grep -q '^/etc/rmeter/' /etc/sysupgrade.conf 2>/dev/null; then
-    echo '/etc/rmeter/' >> /etc/sysupgrade.conf
-fi
+sed -i '/^\/etc\/rmeter\/$/d' /etc/sysupgrade.conf 2>/dev/null || true
+for f in /etc/rmeter/config.conf /etc/rmeter/devices.db /etc/rmeter/fazakkir.json /etc/rmeter/tg_alerts.conf /etc/rmeter/auth.conf /etc/rmeter/sched_reboot.flag; do
+    grep -qxF "$f" /etc/sysupgrade.conf 2>/dev/null || echo "$f" >> /etc/sysupgrade.conf
+done
 
 # Strip IPv6 ULA prefix & DHCPv6 leftovers if present in default UCI
 if uci -q get network.globals.ula_prefix >/dev/null 2>&1; then
