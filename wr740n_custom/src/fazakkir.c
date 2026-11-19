@@ -356,6 +356,7 @@ void fazakkir_write_status_json(void) {
 }
 
 bool fazakkir_refresh_prayers(char *err, size_t err_sz) {
+    s_last_prayer_fetch = time(NULL);
     char c_enc[128], co_enc[128], url[384];
     url_encode_simple(g_fazakkir.city[0] ? g_fazakkir.city : "Cairo", c_enc, sizeof(c_enc));
     url_encode_simple(g_fazakkir.country[0] ? g_fazakkir.country : "Egypt", co_enc, sizeof(co_enc));

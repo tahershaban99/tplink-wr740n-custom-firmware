@@ -394,6 +394,15 @@ static void *ctrl_ipc_thread(void *arg) {
     return NULL;
 }
 
+static void *fazakkir_bg_thread(void *arg) {
+    (void)arg;
+    while (g_running) {
+        fazakkir_tick(time(NULL));
+        sleep(1);
+    }
+    return NULL;
+}
+
 int main(void) {
     signal(SIGTERM, sig_handler);
     signal(SIGINT, sig_handler);
@@ -409,20 +418,30 @@ int main(void) {
         pthread_detach(ipc_tid);
     }
 
+    pthread_t fz_tid;
+    pthread_attr_t fz_attr;
+    pthread_attr_init(&fz_attr);
+    pthread_attr_setstacksize(&fz_attr, 65536);
+    if (pthread_create(&fz_tid, &fz_attr, fazakkir_bg_thread, NULL) == 0) {
+        pthread_detach(fz_tid);
+    }
+    pthread_attr_destroy(&fz_attr);
+
     time_t last_tick = time(NULL);
     time_t last_save = last_tick;
     int last_reboot_day = -1;
     bool reboot_triggered = false;
 
     while (g_running) {
-        sleep(1);
+        struct timespec t_start, t_end;
+        clock_gettime(CLOCK_MONOTONIC, &t_start);
+
         time_t now = time(NULL);
         double dt = difftime(now, last_tick);
         if (dt < 0.5) dt = 1.0;
         last_tick = now;
 
         meter_tick(dt);
-        fazakkir_tick(now);
         meter_write_ram_json();
 
         if (g_flash_dirty && (now - last_save >= 180)) {
@@ -461,6 +480,14 @@ int main(void) {
                 }
             }
         }
+
+        clock_gettime(CLOCK_MONOTONIC, &t_end);
+        long elapsed_us = (long)((t_end.tv_sec - t_start.tv_sec) * 1000000L +
+                                 (t_end.tv_nsec - t_start.tv_nsec) / 1000L);
+        if (elapsed_us < 0) elapsed_us = 0;
+        long rem_us = 1000000L - elapsed_us;
+        if (rem_us < 100000L) rem_us = 100000L;
+        usleep((useconds_t)rem_us);
     }
 
     if (!reboot_triggered) {
