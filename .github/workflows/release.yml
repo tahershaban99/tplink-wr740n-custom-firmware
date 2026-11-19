@@ -1,0 +1,45 @@
+name: Publish Firmware Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'output/routermeter-wr740n-v4-sysupgrade.bin'
+      - '.github/workflows/release.yml'
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine release tag
+        id: meta
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+            echo "title=RouterMeter ${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+            echo "title=RouterMeter Latest (${GITHUB_SHA::7})" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.title }}
+          body_path: output/sha256sums.txt
+          files: |
+            output/routermeter-wr740n-v4-sysupgrade.bin
+            output/routermeter-wr740n-v4-factory.bin
+            output/sha256sums.txt
+          make_latest: true
