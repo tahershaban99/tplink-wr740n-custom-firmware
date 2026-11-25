@@ -14,7 +14,7 @@ if [ -f /etc/config/uhttpd ]; then
 fi
 
 sed -i '/^\/etc\/rmeter\/$/d' /etc/sysupgrade.conf 2>/dev/null || true
-for f in /etc/rmeter/config.conf /etc/rmeter/devices.db /etc/rmeter/fazakkir.json /etc/rmeter/tg_alerts.conf /etc/rmeter/auth.conf /etc/rmeter/sched_reboot.flag; do
+for f in /etc/rmeter/config.conf /etc/rmeter/devices.db /etc/rmeter/fazakkir.json /etc/rmeter/tg_alerts.conf /etc/rmeter/tg_quotas.conf /etc/rmeter/auth.conf /etc/rmeter/sched_reboot.flag; do
     grep -qxF "$f" /etc/sysupgrade.conf 2>/dev/null || echo "$f" >> /etc/sysupgrade.conf
 done
 
