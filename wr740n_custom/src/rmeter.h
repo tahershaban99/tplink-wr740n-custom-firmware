@@ -9,11 +9,13 @@
 #define RMETER_MAX_NAME        64
 #define RMETER_MAX_CHAT_ID     32
 #define RMETER_MAX_THRESHOLDS  8
+#define RMETER_MAX_TG_QUOTAS   24
 
 #define RMETER_STATE_RAM       "/tmp/rmeter/state.json"
 #define RMETER_STATE_FLASH     "/etc/rmeter/devices.db"
 #define RMETER_CFG_FLASH       "/etc/rmeter/config.conf"
 #define RMETER_TG_ALERTS_FLASH "/etc/rmeter/tg_alerts.conf"
+#define RMETER_TG_QUOTAS_FLASH "/etc/rmeter/tg_quotas.conf"
 #define RMETER_SCHED_RB_FLAG   "/etc/rmeter/sched_reboot.flag"
 #define RMETER_TG_USERS_RAM    "/tmp/rmeter/tg_users.json"
 #define RMETER_OTA_VER_RAM     "/tmp/rmeter/ota_ver.json"
@@ -82,8 +84,18 @@ typedef struct {
     char fw_version[24];
     bool observer_mode_enabled;
     bool ota_auto_check_enabled;
+    bool unassigned_policy_enabled;
+    uint64_t unassigned_quota_bytes;
+    uint32_t unassigned_down_kbps;
+    uint32_t unassigned_up_kbps;
     char tg_alert_msgs[RMETER_MAX_THRESHOLDS][256];
 } rmeter_config_t;
+
+typedef struct {
+    char chat_id[RMETER_MAX_CHAT_ID];
+    char label[48];
+    uint64_t total_quota_bytes; /* 0 = unlimited */
+} rmeter_tg_user_quota_t;
 
 #endif /* RMETER_H */
 

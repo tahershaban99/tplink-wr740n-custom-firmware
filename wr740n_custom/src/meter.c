@@ -13,6 +13,8 @@
 
 rmeter_device_t g_devices[RMETER_MAX_DEVICES];
 int g_device_count = 0;
+rmeter_tg_user_quota_t g_tg_quotas[RMETER_MAX_TG_QUOTAS];
+int g_tg_quota_count = 0;
 rmeter_config_t g_config;
 pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -168,6 +170,12 @@ static int ensure_device(const char *mac, const char *ip, const char *hostname) 
         idx = g_device_count++;
         memset(&g_devices[idx], 0, sizeof(rmeter_device_t));
         snprintf(g_devices[idx].mac, sizeof(g_devices[idx].mac), "%s", m);
+        if (g_config.unassigned_policy_enabled) {
+            g_devices[idx].quota_bytes = g_config.unassigned_quota_bytes;
+            g_devices[idx].cap_down_kbps = g_config.unassigned_down_kbps;
+            g_devices[idx].cap_up_kbps = g_config.unassigned_up_kbps;
+            g_tc_dirty = true;
+        }
         g_flash_dirty = true;
     }
 
@@ -264,6 +272,10 @@ void meter_load_all(void) {
             else if (strcmp(k, "ota_version_url") == 0) snprintf(g_config.ota_version_url, sizeof(g_config.ota_version_url), "%s", v);
             else if (strcmp(k, "observer_mode_enabled") == 0) g_config.observer_mode_enabled = (atoi(v) != 0);
             else if (strcmp(k, "ota_auto_check_enabled") == 0) g_config.ota_auto_check_enabled = (atoi(v) != 0);
+            else if (strcmp(k, "unassigned_policy_enabled") == 0) g_config.unassigned_policy_enabled = (atoi(v) != 0);
+            else if (strcmp(k, "unassigned_quota_bytes") == 0) g_config.unassigned_quota_bytes = strtoull(v, NULL, 10);
+            else if (strcmp(k, "unassigned_down_kbps") == 0) g_config.unassigned_down_kbps = (uint32_t)strtoul(v, NULL, 10);
+            else if (strcmp(k, "unassigned_up_kbps") == 0) g_config.unassigned_up_kbps = (uint32_t)strtoul(v, NULL, 10);
         }
         fclose(fp);
     }
@@ -343,6 +355,32 @@ void meter_load_all(void) {
     for (int i = 0; i < g_device_count; i++) {
         s_last_saved_raw_bytes += g_devices[i].up_bytes + g_devices[i].down_bytes;
     }
+
+    g_tg_quota_count = 0;
+    char p_quotas[160];
+    flash_path(p_quotas, sizeof(p_quotas), "tg_quotas.conf");
+    fp = fopen(p_quotas, "r");
+    if (fp) {
+        char line[192];
+        while (fgets(line, sizeof(line), fp) && g_tg_quota_count < RMETER_MAX_TG_QUOTAS) {
+            char *nl = strpbrk(line, "\r\n");
+            if (nl) *nl = '\0';
+            if (!line[0] || line[0] == '#') continue;
+            char *sep1 = strchr(line, '|');
+            if (!sep1) continue;
+            *sep1 = '\0';
+            char *sep2 = strchr(sep1 + 1, '|');
+            if (!sep2) continue;
+            *sep2 = '\0';
+            rmeter_tg_user_quota_t q;
+            memset(&q, 0, sizeof(q));
+            snprintf(q.chat_id, sizeof(q.chat_id), "%s", line);
+            snprintf(q.label, sizeof(q.label), "%s", sep1 + 1);
+            q.total_quota_bytes = strtoull(sep2 + 1, NULL, 10);
+            if (q.chat_id[0]) g_tg_quotas[g_tg_quota_count++] = q;
+        }
+        fclose(fp);
+    }
 }
 
 static bool commit_tmp_file(FILE *fp, const char *tmp_path, const char *dst_path) {
@@ -361,9 +399,11 @@ bool meter_save_all(void) {
 
     rmeter_config_t *snap_cfg = malloc(sizeof(rmeter_config_t));
     rmeter_device_t *snap_devs = malloc(sizeof(rmeter_device_t) * RMETER_MAX_DEVICES);
-    if (!snap_cfg || !snap_devs) {
+    rmeter_tg_user_quota_t *snap_quotas = malloc(sizeof(rmeter_tg_user_quota_t) * RMETER_MAX_TG_QUOTAS);
+    if (!snap_cfg || !snap_devs || !snap_quotas) {
         free(snap_cfg);
         free(snap_devs);
+        free(snap_quotas);
         return false;
     }
 
@@ -380,16 +420,26 @@ bool meter_save_all(void) {
             snap_raw += snap_devs[i].up_bytes + snap_devs[i].down_bytes;
         }
     }
+    int snap_qcnt = g_tg_quota_count;
+    if (snap_qcnt < 0) snap_qcnt = 0;
+    if (snap_qcnt > RMETER_MAX_TG_QUOTAS) snap_qcnt = RMETER_MAX_TG_QUOTAS;
+    if (snap_qcnt > 0) {
+        memcpy(snap_quotas, g_tg_quotas, sizeof(rmeter_tg_user_quota_t) * (size_t)snap_qcnt);
+    }
     s_last_saved_raw_bytes = snap_raw;
     g_flash_dirty = false;
     pthread_mutex_unlock(&g_lock);
 
     static rmeter_config_t s_last_cfg;
     static bool s_has_last_cfg = false;
+    static rmeter_tg_user_quota_t s_last_quotas[RMETER_MAX_TG_QUOTAS];
+    static int s_last_qcnt = -1;
     bool cfg_changed = !s_has_last_cfg ||
                        memcmp(snap_cfg, &s_last_cfg, offsetof(rmeter_config_t, tg_alert_msgs)) != 0;
     bool alerts_changed = !s_has_last_cfg ||
                           memcmp(snap_cfg->tg_alert_msgs, s_last_cfg.tg_alert_msgs, sizeof(snap_cfg->tg_alert_msgs)) != 0;
+    bool quotas_changed = (s_last_qcnt != snap_qcnt) ||
+                          (snap_qcnt > 0 && memcmp(snap_quotas, s_last_quotas, sizeof(rmeter_tg_user_quota_t) * (size_t)snap_qcnt) != 0);
     bool any_alert = false;
     for (int i = 0; i < RMETER_MAX_THRESHOLDS; i++) {
         if (snap_cfg->tg_alert_msgs[i][0]) { any_alert = true; break; }
@@ -427,6 +477,10 @@ bool meter_save_all(void) {
             fprintf(fp, "ota_version_url=%s\n", snap_cfg->ota_version_url);
             fprintf(fp, "observer_mode_enabled=%d\n", snap_cfg->observer_mode_enabled ? 1 : 0);
             fprintf(fp, "ota_auto_check_enabled=%d\n", snap_cfg->ota_auto_check_enabled ? 1 : 0);
+            fprintf(fp, "unassigned_policy_enabled=%d\n", snap_cfg->unassigned_policy_enabled ? 1 : 0);
+            fprintf(fp, "unassigned_quota_bytes=%llu\n", (unsigned long long)snap_cfg->unassigned_quota_bytes);
+            fprintf(fp, "unassigned_down_kbps=%u\n", (unsigned)snap_cfg->unassigned_down_kbps);
+            fprintf(fp, "unassigned_up_kbps=%u\n", (unsigned)snap_cfg->unassigned_up_kbps);
             if (!commit_tmp_file(fp, tmp_cfg, p_cfg)) write_err = true;
         } else {
             write_err = true;
@@ -461,9 +515,33 @@ bool meter_save_all(void) {
         }
     }
 
+    if (quotas_changed) {
+        char p_quotas[160], tmp_quotas[176];
+        flash_path(p_quotas, sizeof(p_quotas), "tg_quotas.conf");
+        if (snap_qcnt == 0) {
+            remove(p_quotas);
+        } else {
+            snprintf(tmp_quotas, sizeof(tmp_quotas), "%s.tmp", p_quotas);
+            fp = fopen(tmp_quotas, "w");
+            if (fp) {
+                for (int i = 0; i < snap_qcnt; i++) {
+                    fprintf(fp, "%s|%s|%llu\n",
+                            snap_quotas[i].chat_id,
+                            snap_quotas[i].label,
+                            (unsigned long long)snap_quotas[i].total_quota_bytes);
+                }
+                if (!commit_tmp_file(fp, tmp_quotas, p_quotas)) write_err = true;
+            } else {
+                write_err = true;
+            }
+        }
+    }
+
     if (!write_err) {
         s_last_cfg = *snap_cfg;
         s_has_last_cfg = true;
+        s_last_qcnt = snap_qcnt;
+        if (snap_qcnt > 0) memcpy(s_last_quotas, snap_quotas, sizeof(rmeter_tg_user_quota_t) * (size_t)snap_qcnt);
     }
 
     char p_db[160], tmp_db[176];
@@ -501,6 +579,7 @@ bool meter_save_all(void) {
 
     free(snap_cfg);
     free(snap_devs);
+    free(snap_quotas);
     return !write_err;
 }
 
@@ -999,6 +1078,10 @@ void meter_write_ram_json(void) {
         fprintf(fp, "  \"flash_free_kb\": %lu,\n", flash_free);
         fprintf(fp, "  \"observer_mode\": %s,\n", g_config.observer_mode_enabled ? "true" : "false");
         fprintf(fp, "  \"ota_auto_check\": %s,\n", g_config.ota_auto_check_enabled ? "true" : "false");
+        fprintf(fp, "  \"unassigned_policy_enabled\": %s,\n", g_config.unassigned_policy_enabled ? "true" : "false");
+        fprintf(fp, "  \"unassigned_quota_bytes\": %llu,\n", (unsigned long long)g_config.unassigned_quota_bytes);
+        fprintf(fp, "  \"unassigned_down_kbps\": %u,\n", (unsigned)g_config.unassigned_down_kbps);
+        fprintf(fp, "  \"unassigned_up_kbps\": %u,\n", (unsigned)g_config.unassigned_up_kbps);
         fprintf(fp, "  \"time_synced\": %s,\n", time_synced ? "true" : "false");
         fprintf(fp, "  \"router_time\": \"%s\",\n", rtime_str);
         fprintf(fp, "  \"wifi_ssid\": \"%s\",\n", esc_ssid);
@@ -1036,6 +1119,16 @@ void meter_write_ram_json(void) {
             char esc_msg[512];
             json_escape(g_config.tg_alert_msgs[a], esc_msg, sizeof(esc_msg));
             fprintf(fp, "\"%s\"%s", esc_msg, (a + 1 < RMETER_MAX_THRESHOLDS) ? "," : "");
+        }
+        fprintf(fp, "],\n");
+        fprintf(fp, "  \"tg_user_quotas\": [");
+        for (int q = 0; q < g_tg_quota_count; q++) {
+            char ec[64], el[96];
+            json_escape(g_tg_quotas[q].chat_id, ec, sizeof(ec));
+            json_escape(g_tg_quotas[q].label, el, sizeof(el));
+            fprintf(fp, "{\"chat_id\":\"%s\",\"label\":\"%s\",\"total_quota_bytes\":%llu}%s",
+                    ec, el, (unsigned long long)g_tg_quotas[q].total_quota_bytes,
+                    (q + 1 < g_tg_quota_count) ? "," : "");
         }
         fprintf(fp, "],\n");
         fprintf(fp, "  \"devices\": [\n");
@@ -1195,6 +1288,149 @@ bool meter_set_device_telegram(const char *mac, const char *chat_id) {
     g_flash_dirty = true;
     pthread_mutex_unlock(&g_lock);
     return true;
+}
+
+int meter_find_tg_user_quota(const char *chat_id) {
+    if (!chat_id || !chat_id[0]) return -1;
+    for (int i = 0; i < g_tg_quota_count; i++) {
+        if (strcmp(g_tg_quotas[i].chat_id, chat_id) == 0) return i;
+    }
+    return -1;
+}
+
+bool meter_set_tg_user_quota(const char *chat_id, const char *label, uint64_t total_bytes) {
+    if (!chat_id || !chat_id[0]) return false;
+    pthread_mutex_lock(&g_lock);
+    int idx = meter_find_tg_user_quota(chat_id);
+    if (idx < 0) {
+        if (g_tg_quota_count >= RMETER_MAX_TG_QUOTAS) {
+            pthread_mutex_unlock(&g_lock);
+            return false;
+        }
+        idx = g_tg_quota_count++;
+        memset(&g_tg_quotas[idx], 0, sizeof(g_tg_quotas[idx]));
+        snprintf(g_tg_quotas[idx].chat_id, sizeof(g_tg_quotas[idx].chat_id), "%s", chat_id);
+        sanitize_device_name(g_tg_quotas[idx].chat_id);
+    }
+    if (label) {
+        snprintf(g_tg_quotas[idx].label, sizeof(g_tg_quotas[idx].label), "%s", label);
+        sanitize_device_name(g_tg_quotas[idx].label);
+    }
+    g_tg_quotas[idx].total_quota_bytes = total_bytes;
+    g_flash_dirty = true;
+    pthread_mutex_unlock(&g_lock);
+    return true;
+}
+
+bool meter_delete_tg_user_quota(const char *chat_id) {
+    if (!chat_id || !chat_id[0]) return false;
+    pthread_mutex_lock(&g_lock);
+    int idx = meter_find_tg_user_quota(chat_id);
+    if (idx < 0) {
+        pthread_mutex_unlock(&g_lock);
+        return false;
+    }
+    for (int i = idx; i + 1 < g_tg_quota_count; i++) {
+        g_tg_quotas[i] = g_tg_quotas[i + 1];
+    }
+    g_tg_quota_count--;
+    g_flash_dirty = true;
+    pthread_mutex_unlock(&g_lock);
+    return true;
+}
+
+bool meter_check_tg_user_overage(const char *chat_id, uint64_t *sum_out, uint64_t *limit_out) {
+    if (sum_out) *sum_out = 0;
+    if (limit_out) *limit_out = 0;
+    if (!chat_id || !chat_id[0]) return false;
+    pthread_mutex_lock(&g_lock);
+    int qidx = meter_find_tg_user_quota(chat_id);
+    uint64_t limit = (qidx >= 0) ? g_tg_quotas[qidx].total_quota_bytes : 0;
+    uint64_t sum = 0;
+    for (int i = 0; i < g_device_count; i++) {
+        if (strcmp(g_devices[i].tg_chat_id, chat_id) == 0) {
+            sum += g_devices[i].quota_bytes;
+        }
+    }
+    pthread_mutex_unlock(&g_lock);
+    if (sum_out) *sum_out = sum;
+    if (limit_out) *limit_out = limit;
+    return (limit > 0 && sum > limit);
+}
+
+bool meter_user_redistribute_quota(const char *chat_id, const char *mac, uint64_t new_quota_bytes,
+                                   char *err_buf, size_t err_sz) {
+    if (err_buf && err_sz) err_buf[0] = '\0';
+    if (!chat_id || !chat_id[0] || !mac || !mac[0]) {
+        if (err_buf && err_sz) snprintf(err_buf, err_sz, "بيانات غير صالحة");
+        return false;
+    }
+    pthread_mutex_lock(&g_lock);
+    int qidx = meter_find_tg_user_quota(chat_id);
+    if (qidx < 0 || g_tg_quotas[qidx].total_quota_bytes == 0) {
+        pthread_mutex_unlock(&g_lock);
+        if (err_buf && err_sz) snprintf(err_buf, err_sz, "لم يتم تحديد باقة كلية لحسابك بعد");
+        return false;
+    }
+    uint64_t user_limit = g_tg_quotas[qidx].total_quota_bytes;
+    int idx = meter_find_by_mac_or_ip(mac);
+    if (idx < 0 || strcmp(g_devices[idx].tg_chat_id, chat_id) != 0) {
+        pthread_mutex_unlock(&g_lock);
+        if (err_buf && err_sz) snprintf(err_buf, err_sz, "الجهاز غير مرتبط بمعرفك");
+        return false;
+    }
+    uint64_t used = meter_scaled_bytes(g_devices[idx].up_bytes + g_devices[idx].down_bytes);
+    if (new_quota_bytes < used) {
+        char ustr[32];
+        meter_fmt_bytes_short(used, ustr, sizeof(ustr));
+        pthread_mutex_unlock(&g_lock);
+        if (err_buf && err_sz) snprintf(err_buf, err_sz, "لا يمكن تقليل باقة الجهاز عن استهلاكه الحالي (%s)", ustr);
+        return false;
+    }
+    uint64_t other_sum = 0;
+    for (int i = 0; i < g_device_count; i++) {
+        if (i != idx && strcmp(g_devices[i].tg_chat_id, chat_id) == 0) {
+            other_sum += g_devices[i].quota_bytes;
+        }
+    }
+    if (other_sum + new_quota_bytes > user_limit) {
+        uint64_t max_allowed = (user_limit > other_sum) ? (user_limit - other_sum) : 0;
+        char mstr[32];
+        meter_fmt_bytes_short(max_allowed, mstr, sizeof(mstr));
+        pthread_mutex_unlock(&g_lock);
+        if (err_buf && err_sz) snprintf(err_buf, err_sz, "المبلغ يتجاوز باقتك الكلية! أقصى حد متاح لهذا الجهاز: %s", mstr);
+        return false;
+    }
+    g_devices[idx].quota_bytes = new_quota_bytes;
+    g_devices[idx].alert_flags = 0;
+    if (new_quota_bytes > used && g_devices[idx].auto_blocked) {
+        g_devices[idx].blocked = false;
+        g_devices[idx].auto_blocked = false;
+        g_fw_dirty = true;
+    }
+    g_flash_dirty = true;
+    pthread_mutex_unlock(&g_lock);
+    return true;
+}
+
+int meter_apply_unassigned_policy_to_existing(void) {
+    int cnt = 0;
+    pthread_mutex_lock(&g_lock);
+    for (int i = 0; i < g_device_count; i++) {
+        rmeter_device_t *d = &g_devices[i];
+        if (d->tg_chat_id[0] == '\0' && d->quota_bytes == 0 && d->cap_down_kbps == 0 && d->cap_up_kbps == 0) {
+            d->quota_bytes = g_config.unassigned_quota_bytes;
+            d->cap_down_kbps = g_config.unassigned_down_kbps;
+            d->cap_up_kbps = g_config.unassigned_up_kbps;
+            cnt++;
+        }
+    }
+    if (cnt > 0) {
+        g_tc_dirty = true;
+        g_flash_dirty = true;
+    }
+    pthread_mutex_unlock(&g_lock);
+    return cnt;
 }
 
 bool meter_reset_device_usage(const char *mac) {

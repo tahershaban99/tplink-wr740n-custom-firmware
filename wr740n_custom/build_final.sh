@@ -44,7 +44,7 @@ export PATH="$STAGING_DIR/toolchain-mips_24kc_gcc-7.3.0_musl/bin:$PATH"
 cd "$PROJ/src"
 make clean
 make CC=mips-openwrt-linux-musl-gcc
-mips-openwrt-linux-musl-strip rmeterd rmeter_cgi
+mips-openwrt-linux-musl-strip --strip-all -R .comment -R .note -R .pdr -R .mdebug.abi32 -R .gnu.attributes rmeterd rmeter_cgi
 ls -lh rmeterd rmeter_cgi
 
 echo "=== 4. Staging Clean Linux RootFS Overlay ==="
@@ -66,12 +66,62 @@ def min_css(m):
     c = re.sub(r'\s*([{:;,}])\s*', r'\1', c)
     return '<style>' + c.strip() + '</style>'
 s = re.sub(r'<style>([\s\S]*?)</style>', min_css, s)
-# Strip HTML comments and JS /* ... */ block comments
+# Strip HTML comments and JS /* ... */ block comments, and collapse HTML whitespace outside <script>/<style>
 s = re.sub(r'<!--[\s\S]*?-->', '', s)
 def min_js(m):
-    j = re.sub(r'/\*[\s\S]*?\*/', '', m.group(1))
-    return '<script>' + j + '</script>'
+    src = m.group(1)
+    # Tokenize strings ('...', "...", `...`), // comments, /*...*/ comments, and code
+    out = []
+    i = 0
+    n = len(src)
+    while i < n:
+        c = src[i]
+        if c in ("'", '"', '`'):
+            q = c
+            j = i + 1
+            while j < n:
+                if src[j] == '\\':
+                    j += 2
+                    continue
+                if q == '`' and src[j:j+2] == '${':
+                    j += 2
+                    continue
+                if src[j] == q:
+                    j += 1
+                    break
+                j += 1
+            out.append(src[i:j])
+            i = j
+        elif src[i:i+2] == '/*':
+            j = src.find('*/', i + 2)
+            i = (j + 2) if j != -1 else n
+        elif src[i:i+2] == '//' and (i == 0 or src[i-1] != ':'):
+            j = src.find('\n', i + 2)
+            i = j if j != -1 else n
+        elif c in ' \t\r\n':
+            # Collapse whitespace to single space or newline, omitting around punctuation
+            has_nl = False
+            while i < n and src[i] in ' \t\r\n':
+                if src[i] == '\n':
+                    has_nl = True
+                i += 1
+            prev = out[-1][-1] if out and out[-1] else ''
+            nxt = src[i] if i < n else ''
+            if prev and nxt and (prev.isalnum() or prev in '_$') and (nxt.isalnum() or nxt in '_$'):
+                out.append('\n' if has_nl else ' ')
+            elif has_nl and prev not in '{[(,;:+-*/<>=!&|?' and nxt not in '}]),;:.+-*/<>=!&|?':
+                out.append('\n')
+        else:
+            out.append(c)
+            i += 1
+    return '<script>' + ''.join(out).strip() + '</script>'
 s = re.sub(r'<script>([\s\S]*?)</script>', min_js, s)
+# Collapse whitespace between HTML tags outside <script> and <style>
+parts = re.split(r'(<script>[\s\S]*?</script>|<style>[\s\S]*?</style>)', s)
+for idx in range(0, len(parts), 2):
+    parts[idx] = re.sub(r'>\s+<', '><', parts[idx])
+    parts[idx] = re.sub(r'[ \t]{2,}', ' ', parts[idx])
+s = ''.join(parts)
 lines = [ln.strip() for ln in s.splitlines() if ln.strip()]
 out = '\n'.join(lines) + '\n'
 open(p, "w", encoding="utf-8").write(out)
@@ -92,7 +142,7 @@ echo "=== 5. Building Custom OpenWrt 18.06.9 Image ==="
 cd "$IB"
 mkdir -p staging_dir/host tmp
 touch staging_dir/host/.prereq-build
-PKGS="-ip6tables -kmod-ip6tables -kmod-nf-conntrack6 -odhcp6c -odhcpd-ipv6only -luci -opkg -uboot-envtools uhttpd iwinfo libustream-mbedtls libmbedtls tc kmod-sched-core iptables-mod-ipopt kmod-ipt-ipopt"
+PKGS="-ip6tables -kmod-ip6tables -kmod-nf-conntrack6 -odhcp6c -odhcpd-ipv6only -luci -opkg -uboot-envtools -dropbear uhttpd iwinfo libustream-mbedtls libmbedtls tc kmod-sched-core iptables-mod-ipopt kmod-ipt-ipopt"
 make image PROFILE=tl-wr740n-v4 PACKAGES="$PKGS" FILES="$STAGE" CONFIG_CLEAN_IPKG=y
 
 echo "=== 6. Exporting Final Images & Checksums ==="

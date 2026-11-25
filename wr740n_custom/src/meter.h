@@ -6,6 +6,8 @@
 
 extern rmeter_device_t g_devices[RMETER_MAX_DEVICES];
 extern int g_device_count;
+extern rmeter_tg_user_quota_t g_tg_quotas[RMETER_MAX_TG_QUOTAS];
+extern int g_tg_quota_count;
 extern rmeter_config_t g_config;
 extern pthread_mutex_t g_lock;
 
@@ -40,6 +42,13 @@ bool meter_set_device_speed_unlocked(const char *mac, bool unlocked);
 bool meter_set_device_name(const char *mac, const char *name);
 bool meter_set_device_binding(const char *mac, const char *bound_ip);
 bool meter_set_device_telegram(const char *mac, const char *chat_id);
+bool meter_set_tg_user_quota(const char *chat_id, const char *label, uint64_t total_bytes);
+bool meter_delete_tg_user_quota(const char *chat_id);
+int  meter_find_tg_user_quota(const char *chat_id);
+bool meter_check_tg_user_overage(const char *chat_id, uint64_t *sum_out, uint64_t *limit_out);
+bool meter_user_redistribute_quota(const char *chat_id, const char *mac, uint64_t new_quota_bytes,
+                                   char *err_buf, size_t err_sz);
+int  meter_apply_unassigned_policy_to_existing(void);
 bool meter_reset_device_usage(const char *mac);
 bool meter_delete_device(const char *mac);
 void meter_reset_all_usage(void);

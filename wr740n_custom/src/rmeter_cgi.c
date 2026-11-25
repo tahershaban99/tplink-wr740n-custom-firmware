@@ -609,8 +609,20 @@ static void launch_sysupgrade_detached(void) {
     waitpid(pid, NULL, 0);
 }
 
+static void drain_stdin(size_t clen) {
+    char buf[1024];
+    size_t rem = clen;
+    while (rem > 0) {
+        size_t chunk = rem > sizeof(buf) ? sizeof(buf) : rem;
+        size_t got = fread(buf, 1, chunk, stdin);
+        if (got == 0) break;
+        rem -= got;
+    }
+}
+
 static void handle_ota_upload(size_t clen) {
     if (clen < 65536 || clen > 3932160) {
+        drain_stdin(clen);
         send_json_hdr(NULL);
         printf("{\"ok\":false,\"error\":\"حجم ملف الفيرموير غير صالح\"}\n");
         return;
@@ -618,8 +630,16 @@ static void handle_ota_upload(size_t clen) {
     /* Flush pending stats to flash & free Linux page cache before 3.7MB RAM write on 32MB device */
     char ipc_resp[128] = {0};
     send_ipc("{\"action\":\"flush_save\"}", ipc_resp, sizeof(ipc_resp));
+    sync();
+    int dc = open("/proc/sys/vm/drop_caches", O_WRONLY);
+    if (dc >= 0) {
+        ssize_t wr = write(dc, "3\n", 2);
+        (void)wr;
+        close(dc);
+    }
     FILE *fp = fopen("/tmp/fw_ota.bin", "wb");
     if (!fp) {
+        drain_stdin(clen);
         send_json_hdr(NULL);
         printf("{\"ok\":false,\"error\":\"تعذر الحفظ في /tmp\"}\n");
         return;
@@ -692,6 +712,7 @@ int main(void) {
 
     if (strcmp(action, "ota_upload") == 0) {
         if (!check_auth()) {
+            drain_stdin(clen);
             send_json_hdr(NULL);
             printf("{\"ok\":false,\"error\":\"unauthorized\"}\n");
             return 0;

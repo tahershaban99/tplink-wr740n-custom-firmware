@@ -249,6 +249,73 @@ static void test_regression_fixes(void) {
     printf("[PASS] test_regression_fixes\n");
 }
 
+static void test_tg_user_quotas_and_unassigned_policy(void) {
+    system("rm -rf /tmp/rmeter_test_flash");
+    meter_init();
+
+    const uint64_t GB = 1073741824ULL;
+    assert(meter_set_tg_user_quota("111222", "Ahmed", 100 * GB));
+    g_config.unassigned_policy_enabled = true;
+    g_config.unassigned_quota_bytes = 5 * GB;
+    g_config.unassigned_down_kbps = 2000;
+    g_config.unassigned_up_kbps = 1000;
+    assert(meter_save_all());
+
+    meter_load_all();
+    assert(g_tg_quota_count == 1);
+    assert(strcmp(g_tg_quotas[0].chat_id, "111222") == 0);
+    assert(strcmp(g_tg_quotas[0].label, "Ahmed") == 0);
+    assert(g_tg_quotas[0].total_quota_bytes == 100 * GB);
+    assert(g_config.unassigned_policy_enabled == true);
+    assert(g_config.unassigned_quota_bytes == 5 * GB);
+    assert(g_config.unassigned_down_kbps == 2000);
+    assert(g_config.unassigned_up_kbps == 1000);
+
+    /* Two devices for Ahmed + one unassigned device */
+    g_device_count = 3;
+    memset(g_devices, 0, sizeof(g_devices));
+    snprintf(g_devices[0].mac, 18, "AA:BB:CC:00:00:01");
+    snprintf(g_devices[0].tg_chat_id, 32, "111222");
+    g_devices[0].quota_bytes = 50 * GB;
+    g_devices[0].down_bytes = 50 * GB;
+    g_devices[0].blocked = true;
+    g_devices[0].auto_blocked = true;
+
+    snprintf(g_devices[1].mac, 18, "AA:BB:CC:00:00:02");
+    snprintf(g_devices[1].tg_chat_id, 32, "111222");
+    g_devices[1].quota_bytes = 50 * GB;
+    g_devices[1].down_bytes = 10 * GB;
+
+    snprintf(g_devices[2].mac, 18, "AA:BB:CC:00:00:03");
+
+    char err[160] = {0};
+    /* Cannot exceed 100 GB total */
+    assert(!meter_user_redistribute_quota("111222", "AA:BB:CC:00:00:01", 60 * GB, err, sizeof(err)));
+    /* Cannot go below current usage (10 GB) on device 2 */
+    assert(!meter_user_redistribute_quota("111222", "AA:BB:CC:00:00:02", 5 * GB, err, sizeof(err)));
+    /* Reduce device 2 to 30 GB, then increase device 1 to 70 GB -> auto-unblocks device 1 */
+    assert(meter_user_redistribute_quota("111222", "AA:BB:CC:00:00:02", 30 * GB, err, sizeof(err)));
+    assert(meter_user_redistribute_quota("111222", "AA:BB:CC:00:00:01", 70 * GB, err, sizeof(err)));
+    assert(!g_devices[0].blocked && !g_devices[0].auto_blocked);
+
+    /* Admin overage check */
+    uint64_t sum = 0, lim = 0;
+    assert(!meter_check_tg_user_overage("111222", &sum, &lim));
+    meter_set_device_quota("AA:BB:CC:00:00:01", 80 * GB);
+    assert(meter_check_tg_user_overage("111222", &sum, &lim));
+    assert(sum == 110 * GB && lim == 100 * GB);
+
+    /* Apply unassigned policy to existing unassigned device */
+    assert(meter_apply_unassigned_policy_to_existing() == 1);
+    assert(g_devices[2].quota_bytes == 5 * GB);
+    assert(g_devices[2].cap_down_kbps == 2000 && g_devices[2].cap_up_kbps == 1000);
+
+    assert(meter_delete_tg_user_quota("111222"));
+    assert(g_tg_quota_count == 0);
+
+    printf("[PASS] test_tg_user_quotas_and_unassigned_policy\n");
+}
+
 int main(void) {
     setenv("RMETER_FLASH_DIR", "/tmp/rmeter_test_flash", 1);
     test_json_util();
@@ -256,6 +323,7 @@ int main(void) {
     test_alert_templates_and_flags();
     test_meter_save_all_snapshot_concurrent();
     test_regression_fixes();
+    test_tg_user_quotas_and_unassigned_policy();
     printf("ALL UNIT TESTS PASSED\n");
     return 0;
 }

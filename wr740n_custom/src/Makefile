@@ -1,6 +1,6 @@
 CC ?= gcc
-CFLAGS ?= -Os -Wall -Wextra -std=gnu99 -ffunction-sections -fdata-sections
-LDFLAGS ?= -lpthread -ldl -Wl,--gc-sections
+CFLAGS ?= -Os -flto -Wall -Wextra -std=gnu99 -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables -fmerge-all-constants
+LDFLAGS ?= -Os -flto -lpthread -ldl -Wl,--gc-sections
 
 SRCS = main.c meter.c firewall.c telegram.c json_util.c fazakkir.c
 OBJS = $(SRCS:.c=.o)

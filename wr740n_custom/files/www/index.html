@@ -666,6 +666,40 @@ canvas{width:100%;display:block;border-radius:var(--r-sm);background:var(--bg-su
           <button class="btn pri" onclick="saveMeterScale()">حفظ المعايرة</button>
         </div>
       </div>
+
+      <div class="grid g2" style="margin-top:14px">
+        <div class="card">
+          <div class="sec-h"><h2>👥 باقات المستخدمين (ربط معرف التليجرام)</h2></div>
+          <div id="uqWarnBanner" class="hide" style="background:rgba(245,158,11,.15);border:1px solid var(--warn);color:var(--warn);padding:8px 10px;border-radius:8px;font-size:12px;margin-bottom:10px"></div>
+          <div class="grid g2" style="gap:8px">
+            <div class="fg"><label>اسم المستخدم</label><input class="inp" id="uqLabel" placeholder="مثال: أحمد"></div>
+            <div class="fg"><label>معرف التليجرام (Chat ID)</label><input class="inp" id="uqChatId" placeholder="مثال: 123456789"></div>
+          </div>
+          <div class="grid g2" style="gap:8px;align-items:end">
+            <div class="fg"><label>إجمالي الباقة الكلية (GB) (0 = مفتوحة)</label><input class="inp" id="uqGb" type="number" step="0.1" min="0" value="0"></div>
+            <div class="fg"><button class="btn pri" style="width:100%" onclick="saveTgUserQuota()">حفظ / إضافة مستخدم</button></div>
+          </div>
+          <div style="overflow-x:auto;margin-top:8px">
+            <table style="width:100%;font-size:12px">
+              <thead><tr><th>المستخدم</th><th>المعرف</th><th>الباقة الكلية</th><th>الاستهلاك الكلي</th><th>الموزع (الأجهزة)</th><th>إجراء</th></tr></thead>
+              <tbody id="uqTbody"><tr><td colspan="6" style="color:var(--muted);text-align:center">لا يوجد مستخدمون مضافون</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="sec-h"><h2>👤 سياسة الأجهزة بدون معرف تليجرام</h2></div>
+          <p style="font-size:12px;color:var(--muted);margin-bottom:10px">تُطبّق تلقائياً عند اتصال أي جهاز جديد غير مربوط بمعرف تليجرام، مع إمكانية تعديله يدوياً من صفحة الأجهزة.</p>
+          <div class="fg"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="unEn"> <b>تفعيل الباقة والسرعة الافتراضية تلقائياً</b></label></div>
+          <div class="fg"><label>الباقة الافتراضية بالجيجابايت (0 = بدون حد)</label><input class="inp" id="unGb" type="number" step="0.1" min="0" value="0"></div>
+          <div class="grid g2">
+            <div class="fg"><label>سرعة التحميل Mbps (0 = مفتوح)</label><input class="inp" id="unDown" type="number" step="0.5" min="0" value="0"></div>
+            <div class="fg"><label>سرعة الرفع Mbps (0 = مفتوح)</label><input class="inp" id="unUp" type="number" step="0.5" min="0" value="0"></div>
+          </div>
+          <div class="fg"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="unApply"> تطبيق أيضاً على الأجهزة الحالية غير المربوطة</label></div>
+          <button class="btn pri" onclick="saveUnassignedPolicy()">حفظ سياسة غير المربوطين</button>
+        </div>
+      </div>
     </section>
 
     <!-- TAB 3: NATIVE WIFI & WAN -->
@@ -1270,6 +1304,10 @@ function render(){
     $('tgTok').value=S.tg_token||'';$('tgIds').value=S.tg_admin_ids||'';$('tgThr').value=S.tg_thresholds||'50,75,90,95,100';
     $('obsMode').checked=!!S.observer_mode;
     $('otaAutoChk').checked=S.ota_auto_check!==false;
+    $('unEn').checked=!!S.unassigned_policy_enabled;
+    $('unGb').value=S.unassigned_quota_bytes?(S.unassigned_quota_bytes/gbUnit()).toFixed(2):0;
+    $('unDown').value=S.unassigned_down_kbps?(S.unassigned_down_kbps/1000):0;
+    $('unUp').value=S.unassigned_up_kbps?(S.unassigned_up_kbps/1000):0;
     $('rbEn').checked=!!S.auto_reboot_enabled;$('rbHr').value=S.auto_reboot_hour??4;$('rbMn').value=S.auto_reboot_min??0;$('rbTz').value=S.auto_reboot_tz??2;
     $('otaVerUrl').value=S.ota_version_url||'';
   }
@@ -1277,6 +1315,7 @@ function render(){
 
   renderDevices();
   renderTgUsers();
+  renderTgUserQuotas();
 }
 
 function drawCanvasChart(cid){
@@ -1505,18 +1544,35 @@ function patchDevNode(node,d){
   if(ub){ub.className='btn sm '+(d.speed_unlocked?'active-unlim':'ok');ub.textContent=d.speed_unlocked?'🔓':'🚀';ub.title=d.speed_unlocked?'إعادة تطبيق تحديد السرعة':'فتح السرعة الكاملة بدون تغيير القيم';ub.setAttribute('onclick',`togUnlim('${d.mac}',${!d.speed_unlocked})`);}
 }
 
-function renderListInto(wrap,list,emptyMsg,isTbl,force){
-  const key=list.map(d=>d.mac+(openPin[d.mac]?'+':'')).join('|');
-  const setKey=list.map(d=>d.mac+(openPin[d.mac]?'+':'')).sort().join('|');
+function userGroupStats(cid){
+  const devs=(S&&S.devices)||[], uq=(S&&S.tg_user_quotas)||[];
+  const u=cid?uq.find(x=>x.chat_id===cid):null;
+  const uDevs=devs.filter(d=>(d.tg_chat_id||'')===cid);
+  const used=uDevs.reduce((a,d)=>a+(d.up_bytes||0)+(d.down_bytes||0),0);
+  const alloc=uDevs.reduce((a,d)=>a+(d.quota_bytes||0),0);
+  const lim=u?(u.total_quota_bytes||0):0;
+  const over=(lim>0&&alloc>lim);
+  const lbl=cid?(u&&u.label?u.label:'مستخدم'):'أجهزة بدون معرف تليجرام';
+  return {cid,lbl,lim,used,alloc,over,cnt:uDevs.length};
+}
+function ugHeaderHtml(cid){
+  const g=userGroupStats(cid);
+  if(!cid) return `👤 <b>${g.lbl}</b> <span class="badge">${g.cnt}</span> • 📊 الاستهلاك الكلي: <b>${fmtBytes(g.used)}</b>`;
+  const limTxt=g.lim>0?fmtBytes(g.lim):'مفتوحة ♾️';
+  return `👤 <b>${esc(g.lbl)}</b> • 🆔 <code>${esc(cid)}</code> • 📦 الباقة الكلية: <b>${limTxt}</b> • 📊 الاستهلاك الكلي: <b>${fmtBytes(g.used)}</b> • ⚖️ الموزع: <b>${fmtBytes(g.alloc)}</b>${g.over?' <span class="badge err">⚠️ متجاوز</span>':''}`;
+}
+function renderListInto(wrap,list,emptyMsg,isTbl,force,grouped){
+  const key=list.map(d=>d.mac+(grouped?'@'+(d.tg_chat_id||''):'')+(openPin[d.mac]?'+':'')).join('|');
+  const setKey=list.map(d=>d.mac+(grouped?'@'+(d.tg_chat_id||''):'')+(openPin[d.mac]?'+':'')).sort().join('|');
   const actEl=document.activeElement;
   const editing=!!(actEl&&actEl.tagName==='INPUT'&&wrap.contains(actEl));
   if(!force&&(wrap.dataset.key===key||(editing&&wrap.dataset.setKey===setKey))){
     list.forEach(d=>wrap.querySelectorAll(`[data-mac="${d.mac}"]`).forEach(n=>patchDevNode(n,d)));
+    if(grouped) wrap.querySelectorAll('[data-ugroup]').forEach(el=>{const h=ugHeaderHtml(el.dataset.ugroup||'');if(el.innerHTML!==h)el.innerHTML=h;});
     return;
   }
   wrap.dataset.key=key;wrap.dataset.setKey=setKey;
-  if(isTbl){
-    wrap.innerHTML=list.map(d=>{
+  const rowHtml=d=>{
       const v=devVals(d), sp=devSpdHtml(d), qs=devQuotaStats(d), pin=!!openPin[d.mac];
       const df=dirtyMap[d.mac]||{};
       const cls=(f,base)=>base+(df[f]!==undefined?' dirty':'');
@@ -1551,9 +1607,8 @@ function renderListInto(wrap,list,emptyMsg,isTbl,force){
         <td><input class="${cls('tg','tinp')}" data-f="tg" list="tgUsersDL" value="${esc(v.tg)}" placeholder="Chat ID" style="width:100px;font-family:var(--font-mono);font-size:calc(10.5px * var(--fs-k,1));text-align:center" title="معرف التيليجرام لهذا الجهاز" oninput="onDevInp('${d.mac}','tg',this)" onkeydown="onDevKey(event,'${d.mac}')"></td>
         <td><div class="act-cell">${devRowBtns(d,v.dirty)}</div></td>
       </tr>`;
-    }).join('') || `<tr><td colspan="9" style="color:var(--muted);text-align:center">${emptyMsg}</td></tr>`;
-  } else {
-    wrap.innerHTML=list.map(d=>{
+  };
+  const cardHtml=d=>{
       const v=devVals(d), sp=devSpdHtml(d), qs=devQuotaStats(d), pin=!!openPin[d.mac];
       const df=dirtyMap[d.mac]||{};
       const cls=f=>df[f]!==undefined?'tinp dirty':'tinp';
@@ -1590,7 +1645,22 @@ function renderListInto(wrap,list,emptyMsg,isTbl,force){
         <div><input class="${cls('tg')}" data-f="tg" list="tgUsersDL" value="${esc(v.tg)}" placeholder="Telegram Chat ID" style="width:100%;font-family:var(--font-mono)" oninput="onDevInp('${d.mac}','tg',this)" onkeydown="onDevKey(event,'${d.mac}')"></div>
         <div class="acts" style="justify-content:flex-end">${devRowBtns(d,v.dirty)}</div>
       </div>`;
-    }).join('') || `<p style="color:var(--muted)">${emptyMsg}</p>`;
+  };
+  if(!list.length){
+    wrap.innerHTML=isTbl?`<tr><td colspan="9" style="color:var(--muted);text-align:center">${emptyMsg}</td></tr>`:`<p style="color:var(--muted)">${emptyMsg}</p>`;
+    return;
+  }
+  if(!grouped){
+    wrap.innerHTML=isTbl?list.map(rowHtml).join(''):list.map(cardHtml).join('');
+    return;
+  }
+  const order=[], map={};
+  list.forEach(d=>{const k=d.tg_chat_id||'';if(!map[k]){map[k]=[];order.push(k);}map[k].push(d);});
+  order.sort((a,b)=>{if(!a&&b)return 1;if(a&&!b)return -1;return a.localeCompare(b);});
+  if(isTbl){
+    wrap.innerHTML=order.map(k=>`<tr><td colspan="9" data-ugroup="${esc(k)}" style="text-align:right;background:rgba(132,204,22,.1);border-top:2px solid rgba(132,204,22,.35);padding:7px 10px;font-size:12px">${ugHeaderHtml(k)}</td></tr>`+map[k].map(rowHtml).join('')).join('');
+  }else{
+    wrap.innerHTML=order.map(k=>`<div style="grid-column:1/-1;background:rgba(132,204,22,.1);border:1px solid rgba(132,204,22,.3);border-radius:8px;padding:8px 10px;font-size:12px" data-ugroup="${esc(k)}">${ugHeaderHtml(k)}</div>`+map[k].map(cardHtml).join('')).join('');
   }
 }
 
@@ -1615,8 +1685,8 @@ function renderDevices(force){
   $('onBadge').textContent=onList.length+' متصل';
   $('offBadge').textContent=offList.length+' غير متصل';
   $('offlineCard').classList.toggle('hide',flt==='on');
-  renderListInto(tableMode?$('devTbodyOn'):$('devCardsOn'),onList,'لا توجد أجهزة متصلة حالياً.',tableMode,force);
-  renderListInto(tableMode?$('devTbodyOff'):$('devCardsOff'),offList,'لا توجد أجهزة غير متصلة.',tableMode,force);
+  renderListInto(tableMode?$('devTbodyOn'):$('devCardsOn'),onList,'لا توجد أجهزة متصلة حالياً.',tableMode,force,true);
+  renderListInto(tableMode?$('devTbodyOff'):$('devCardsOff'),offList,'لا توجد أجهزة غير متصلة.',tableMode,force,false);
 }
 
 async function saveRow(mac){
@@ -1630,6 +1700,7 @@ async function saveRow(mac){
   delete dirtyMap[mac];
   document.querySelectorAll('[data-mac="'+mac+'"] .dirty').forEach(e=>e.classList.remove('dirty'));
   toast('تم حفظ بيانات الجهاز');await poll();
+  checkUserOverageToast(body.tg_chat_id);
 }
 async function addGb(mac,gb){
   const r=await api('device_add_quota',{mac,add_bytes:Math.round(gb*gbUnit())});
@@ -1638,6 +1709,8 @@ async function addGb(mac,gb){
   const qi=document.querySelector(`[data-mac="${mac}"] [data-f="quota"]`);
   if(qi&&document.activeElement===qi)qi.blur();
   toast('تمت إضافة '+gb+' GB');await poll();
+  const d=S.devices.find(x=>x.mac===mac);
+  if(d&&d.tg_chat_id) checkUserOverageToast(d.tg_chat_id);
 }
 async function togBlk(mac,blk){const r=await api('device_block',{mac,blocked:blk});if(!r||!r.ok){toast((r&&(r.msg||r.error))||'تعذر تنفيذ الحظر');return;}toast(blk?'تم الحظر':'تم فك الحظر');await poll();}
 async function togVip(mac,vip){const r=await api('device_gaming',{mac,gaming_mode:vip});if(!r||!r.ok){toast((r&&(r.msg||r.error))||'تعذر تغيير VIP');return;}toast(vip?'تم تفعيل VIP':'تم إلغاء VIP');await poll();}
@@ -1655,6 +1728,69 @@ async function saveMeterScale(){
   const r=await api('meter_scale',{gb_standard:parseInt($('qStd').value),scale_pct:parseInt($('qPct').value),scale_mode:parseInt($('qMode').value)});
   if(!r||!r.ok){toast((r&&(r.msg||r.error))||'فشل حفظ المعايرة');return;}
   toast('تم حفظ المعايرة');poll();
+}
+function checkUserOverageToast(cid){
+  if(!cid||!S||!S.tg_user_quotas)return;
+  const u=S.tg_user_quotas.find(x=>x.chat_id===cid);
+  if(!u||!u.total_quota_bytes)return;
+  const sum=(S.devices||[]).filter(d=>d.tg_chat_id===cid).reduce((a,d)=>a+(d.quota_bytes||0),0);
+  if(sum>u.total_quota_bytes){
+    toast('⚠️ تحذير: مجموع باقات أجهزة '+(u.label||cid)+' ('+fmtBytes(sum)+') تجاوز الحد الكلي ('+fmtBytes(u.total_quota_bytes)+')!');
+  }
+}
+function renderTgUserQuotas(){
+  const tb=$('uqTbody'), wb=$('uqWarnBanner');
+  if(!tb||!S)return;
+  const list=S.tg_user_quotas||[], devs=S.devices||[];
+  const warns=[];
+  if(!list.length){
+    tb.innerHTML='<tr><td colspan="6" style="color:var(--muted);text-align:center">لا يوجد مستخدمون مضافون</td></tr>';
+    if(wb)wb.classList.add('hide');
+    return;
+  }
+  tb.innerHTML=list.map(u=>{
+    const uDevs=devs.filter(d=>d.tg_chat_id===u.chat_id);
+    const sum=uDevs.reduce((a,d)=>a+(d.quota_bytes||0),0);
+    const usedSum=uDevs.reduce((a,d)=>a+(d.up_bytes||0)+(d.down_bytes||0),0);
+    const lim=u.total_quota_bytes||0;
+    const over=(lim>0&&sum>lim);
+    if(over) warns.push((u.label||u.chat_id)+' ('+fmtBytes(sum)+' / '+fmtBytes(lim)+')');
+    const limTxt=lim>0?fmtBytes(lim):'مفتوحة';
+    const sumTxt=fmtBytes(sum)+' ('+uDevs.length+')'+(over?' <span class="badge err" style="font-size:10px">⚠️ متجاوز</span>':'');
+    return `<tr><td><b>${esc(u.label||'-')}</b></td><td><code>${esc(u.chat_id)}</code></td><td>${limTxt}</td><td><b>${fmtBytes(usedSum)}</b></td><td>${sumTxt}</td><td><button class="btn sm" onclick="editTgUserQuota('${esc(u.chat_id)}','${esc(u.label||'')}',${(lim/gbUnit()).toFixed(2)})">✏️</button> <button class="btn sm err" onclick="delTgUserQuota('${esc(u.chat_id)}')">🗑️</button></td></tr>`;
+  }).join('');
+  if(wb){
+    if(warns.length){wb.innerHTML='⚠️ <b>تنبيه تجاوز باقة المستخدم:</b> '+warns.join(' • ');wb.classList.remove('hide');}
+    else wb.classList.add('hide');
+  }
+}
+function editTgUserQuota(cid,lbl,gb){$('uqChatId').value=cid;$('uqLabel').value=lbl;$('uqGb').value=gb;}
+async function saveTgUserQuota(){
+  const chat_id=$('uqChatId').value.trim(), label=$('uqLabel').value.trim();
+  const total_quota_bytes=Math.round((parseFloat($('uqGb').value)||0)*gbUnit());
+  if(!chat_id){toast('أدخل معرف التليجرام أولاً');return;}
+  const r=await api('tg_user_quota_save',{chat_id,label,total_quota_bytes});
+  if(!r||!r.ok){toast((r&&(r.msg||r.error))||'فشل حفظ باقة المستخدم');return;}
+  $('uqChatId').value='';$('uqLabel').value='';$('uqGb').value='0';
+  toast('تم حفظ باقة المستخدم');await poll();checkUserOverageToast(chat_id);
+}
+async function delTgUserQuota(cid){
+  if(!confirm('حذف باقة هذا المستخدم؟'))return;
+  const r=await api('tg_user_quota_delete',{chat_id:cid});
+  if(!r||!r.ok){toast('تعذر الحذف');return;}
+  toast('تم حذف المستخدم');await poll();
+}
+async function saveUnassignedPolicy(){
+  const r=await api('unassigned_policy_save',{
+    enabled:$('unEn').checked,
+    quota_bytes:Math.round((parseFloat($('unGb').value)||0)*gbUnit()),
+    down_kbps:Math.round((parseFloat($('unDown').value)||0)*1000),
+    up_kbps:Math.round((parseFloat($('unUp').value)||0)*1000),
+    apply_existing:$('unApply').checked
+  });
+  if(!r||!r.ok){toast((r&&(r.msg||r.error))||'فشل حفظ السياسة');return;}
+  $('unApply').checked=false;
+  toast('تم حفظ سياسة الأجهزة بدون معرف تليجرام');await poll();
 }
 function toggleWanFields(){
   const p=$('wanProto').value;

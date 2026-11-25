@@ -307,6 +307,46 @@ static void process_ctrl_json(const char *req, char *resp, size_t resp_sz) {
         bool saved = meter_save_all();
         meter_write_ram_json();
         reply_save_result(resp, resp_sz, saved);
+    } else if (strcmp(action, "tg_user_quota_save") == 0) {
+        char chat_id[RMETER_MAX_CHAT_ID] = {0}, label[48] = {0};
+        uint64_t total_b = 0;
+        json_get_str(req, "chat_id", chat_id, sizeof(chat_id));
+        json_get_str(req, "label", label, sizeof(label));
+        json_get_u64(req, "total_quota_bytes", &total_b);
+        bool ok = meter_set_tg_user_quota(chat_id, label, total_b);
+        if (!ok) {
+            snprintf(resp, resp_sz, "{\"ok\":false,\"error\":\"معرف غير صالح أو تم بلوغ الحد الأقصى للمستخدمين\"}");
+        } else {
+            bool saved = meter_save_all();
+            meter_write_ram_json();
+            reply_save_result(resp, resp_sz, saved);
+        }
+    } else if (strcmp(action, "tg_user_quota_delete") == 0) {
+        char chat_id[RMETER_MAX_CHAT_ID] = {0};
+        json_get_str(req, "chat_id", chat_id, sizeof(chat_id));
+        bool ok = meter_delete_tg_user_quota(chat_id);
+        if (!ok) {
+            snprintf(resp, resp_sz, "{\"ok\":false,\"error\":\"المستخدم غير موجود\"}");
+        } else {
+            bool saved = meter_save_all();
+            meter_write_ram_json();
+            reply_save_result(resp, resp_sz, saved);
+        }
+    } else if (strcmp(action, "unassigned_policy_save") == 0) {
+        bool en = false, apply_ex = false;
+        uint64_t qb = 0, dk = 0, uk = 0;
+        pthread_mutex_lock(&g_lock);
+        if (json_get_bool(req, "enabled", &en)) g_config.unassigned_policy_enabled = en;
+        if (json_get_u64(req, "quota_bytes", &qb)) g_config.unassigned_quota_bytes = qb;
+        if (json_get_u64(req, "down_kbps", &dk)) g_config.unassigned_down_kbps = (uint32_t)dk;
+        if (json_get_u64(req, "up_kbps", &uk)) g_config.unassigned_up_kbps = (uint32_t)uk;
+        pthread_mutex_unlock(&g_lock);
+        if (json_get_bool(req, "apply_existing", &apply_ex) && apply_ex) {
+            meter_apply_unassigned_policy_to_existing();
+        }
+        bool saved = meter_save_all();
+        meter_write_ram_json();
+        reply_save_result(resp, resp_sz, saved);
     } else if (strcmp(action, "flush_save") == 0) {
         bool saved = meter_save_all();
         meter_write_ram_json();
