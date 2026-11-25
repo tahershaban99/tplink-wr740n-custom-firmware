@@ -313,6 +313,14 @@ static void test_tg_user_quotas_and_unassigned_policy(void) {
     assert(meter_delete_tg_user_quota("111222"));
     assert(g_tg_quota_count == 0);
 
+    /* Temporary VIP activation and expiry */
+    assert(meter_user_set_device_vip("111222", "AA:BB:CC:00:00:01", 15));
+    assert(g_devices[0].gaming_mode && g_devices[0].vip_until > time(NULL));
+    assert(!meter_user_set_device_vip("999999", "AA:BB:CC:00:00:01", 15));
+    g_devices[0].vip_until = time(NULL) - 1;
+    meter_tick(1.0);
+    assert(!g_devices[0].gaming_mode && g_devices[0].vip_until == 0);
+
     printf("[PASS] test_tg_user_quotas_and_unassigned_policy\n");
 }
 

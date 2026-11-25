@@ -52,6 +52,7 @@ typedef struct {
     uint16_t alert_flags;      /* bitmask of sent threshold alerts */
     time_t last_seen;
     time_t connected_at;
+    time_t vip_until;          /* 0 = permanent/none, >0 = temporary VIP expiry epoch */
 } rmeter_device_t;
 
 typedef struct {

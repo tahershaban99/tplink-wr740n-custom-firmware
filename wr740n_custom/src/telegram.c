@@ -47,7 +47,7 @@ static bool s_ota_bg_running = false;
 static const char *TG_ADMIN_KEYBOARD =
     "{\"keyboard\":["
     "[{\"text\":\"🏠 القائمة الرئيسية\"},{\"text\":\"👥 الأجهزة المتصلة\"}],"
-    "[{\"text\":\"📊 استهلاك الباقة\"},{\"text\":\"⚡ فحص السرعة\"}],"
+    "[{\"text\":\"📊 تقسيم الباقة واستهلاكها\"},{\"text\":\"⚡ فحص السرعة\"}],"
     "[{\"text\":\"⚙️ حالة الراوتر\"},{\"text\":\"📡 الوايفاي والشبكة\"}],"
     "[{\"text\":\"🕌 الصلاة القادمة\"},{\"text\":\"🚀 فحص التحديثات\"}],"
     "[{\"text\":\"🔄 إعادة التشغيل\"}]"
@@ -56,8 +56,8 @@ static const char *TG_ADMIN_KEYBOARD =
 static const char *TG_USER_KEYBOARD =
     "{\"keyboard\":["
     "[{\"text\":\"📊 استهلاكي\"},{\"text\":\"⚖️ توزيع الباقة\"}],"
-    "[{\"text\":\"⚡ سرعتي\"},{\"text\":\"🕌 الصلاة القادمة\"}],"
-    "[{\"text\":\"📋 مساعدة\"}]"
+    "[{\"text\":\"🎮 تفعيل VIP\"},{\"text\":\"⚡ سرعتي\"}],"
+    "[{\"text\":\"🕌 الصلاة القادمة\"},{\"text\":\"📋 مساعدة\"}]"
     "],\"resize_keyboard\":true}";
 
 typedef struct {
@@ -82,13 +82,17 @@ typedef enum {
     PEND_WAN_SPD,
     PEND_REBOOT_TIME,
     PEND_USER_DEV_QUOTA,
-    PEND_UNASSIGNED_CFG
+    PEND_USER_VIP_MIN,
+    PEND_UNASSIGNED_CFG,
+    PEND_ADMIN_TGU_ADD,
+    PEND_ADMIN_TGU_NAME,
+    PEND_ADMIN_TGU_QUOTA
 } pend_kind_t;
 
 typedef struct {
     char chat_id[32];
     pend_kind_t kind;
-    char mac[24];
+    char mac[32];
     time_t expires_at;
 } tg_pending_t;
 
@@ -1779,10 +1783,137 @@ static void send_admin_quota_menu(const char *chat_id, int64_t edit_msg_id) {
              "[{\"text\":\"⚖️ المعايرة (Scale)\",\"callback_data\":\"adm_scale\"},"
              "{\"text\":\"👥 الأجهزة\",\"callback_data\":\"adm_devs:on\"}],"
              "[{\"text\":\"👤 سياسة غير المربوطين\",\"callback_data\":\"adm_unassigned\"},"
-             "{\"text\":\"🧹 تصفير استهلاك الكل\",\"callback_data\":\"rstall_ask\"}],"
+             "{\"text\":\"👥 المستخدمين وتقسيم الباقة\",\"callback_data\":\"adm_tg_users\"}],"
+             "[{\"text\":\"🧹 تصفير استهلاك الكل\",\"callback_data\":\"rstall_ask\"}],"
              "[{\"text\":\"🔄 تحديث\",\"callback_data\":\"adm_quota\"},"
              "{\"text\":\"🏠 الرئيسية\",\"callback_data\":\"adm_home\"}]"
              "]}");
+
+    tg_edit_or_send(chat_id, edit_msg_id, msg, kb);
+    free(msg);
+    free(kb);
+}
+
+static void send_admin_tg_users_menu(const char *chat_id, int64_t edit_msg_id) {
+    char *msg = calloc(1, 2048);
+    char *kb = calloc(1, 2048);
+    if (!msg || !kb) { free(msg); free(kb); return; }
+
+    pthread_mutex_lock(&g_lock);
+    int qcnt = g_tg_quota_count;
+    size_t pos = snprintf(msg, 2048, "👥 <b>إدارة المستخدمين وتقسيم الباقة (%d):</b>\n\n", qcnt);
+    size_t kpos = snprintf(kb, 2048, "{\"inline_keyboard\":[");
+    if (qcnt == 0) {
+        pos += snprintf(msg + pos, 2048 - pos, "لا يوجد مستخدمون مضافون حالياً.\n");
+    }
+    for (int i = 0; i < qcnt && pos + 160 < 2000 && kpos + 120 < 1850; i++) {
+        const char *cid = g_tg_quotas[i].chat_id;
+        const char *lbl = g_tg_quotas[i].label[0] ? g_tg_quotas[i].label : cid;
+        uint64_t lim = g_tg_quotas[i].total_quota_bytes;
+        uint64_t used = 0, alloc = 0;
+        int dcnt = 0;
+        for (int d = 0; d < g_device_count; d++) {
+            if (strcmp(g_devices[d].tg_chat_id, cid) == 0) {
+                used += meter_scaled_bytes(g_devices[d].up_bytes + g_devices[d].down_bytes);
+                alloc += g_devices[d].quota_bytes;
+                dcnt++;
+            }
+        }
+        char nm[48], us[24], ls[24], al[24], jnm[36];
+        html_escape(lbl, nm, sizeof(nm));
+        json_safe_label(lbl, jnm, sizeof(jnm));
+        fmt_bytes(used, us, sizeof(us));
+        if (lim > 0) fmt_bytes(lim, ls, sizeof(ls));
+        else snprintf(ls, sizeof(ls), "مفتوحة");
+        fmt_bytes(alloc, al, sizeof(al));
+        bool over = (lim > 0 && alloc > lim);
+        pos += snprintf(msg + pos, 2048 - pos,
+                        "• <b>%s</b> (<code>%s</code>)\n  📊 %s / %s | ⚖️ %s (%d)%s\n",
+                        nm, cid, us, ls, al, dcnt, over ? " ⚠️" : "");
+        kpos += snprintf(kb + kpos, 2048 - kpos,
+                         "%s[{\"text\":\"👤 %s (%s)%s\",\"callback_data\":\"adm_tgu:%s\"}]",
+                         (i > 0) ? "," : "", jnm, ls, over ? " ⚠️" : "", cid);
+    }
+    pthread_mutex_unlock(&g_lock);
+
+    snprintf(kb + kpos, 2048 - kpos,
+             "%s[{\"text\":\"➕ إضافة مستخدم\",\"callback_data\":\"adm_tgu_add\"}],"
+             "[{\"text\":\"🔄 تحديث\",\"callback_data\":\"adm_tg_users\"},"
+             "{\"text\":\"🔙 رجوع\",\"callback_data\":\"adm_quota\"}]]}",
+             (qcnt > 0) ? "," : "");
+    tg_edit_or_send(chat_id, edit_msg_id, msg, kb);
+    free(msg);
+    free(kb);
+}
+
+static void send_admin_tg_user_detail(const char *chat_id, int64_t edit_msg_id, const char *target_cid) {
+    char lbl[48] = {0};
+    uint64_t lim = 0, used = 0, alloc = 0;
+    rmeter_device_t devs[6];
+    int dcnt = 0;
+    bool found = false;
+
+    pthread_mutex_lock(&g_lock);
+    int qidx = meter_find_tg_user_quota(target_cid);
+    if (qidx >= 0) {
+        found = true;
+        snprintf(lbl, sizeof(lbl), "%s", g_tg_quotas[qidx].label);
+        lim = g_tg_quotas[qidx].total_quota_bytes;
+        for (int i = 0; i < g_device_count; i++) {
+            if (strcmp(g_devices[i].tg_chat_id, target_cid) == 0) {
+                used += meter_scaled_bytes(g_devices[i].up_bytes + g_devices[i].down_bytes);
+                alloc += g_devices[i].quota_bytes;
+                if (dcnt < 6) devs[dcnt++] = g_devices[i];
+            }
+        }
+    }
+    pthread_mutex_unlock(&g_lock);
+
+    if (!found) { send_admin_tg_users_menu(chat_id, edit_msg_id); return; }
+
+    char nm[64], ls[24], us[24], al[24];
+    html_escape(lbl[0] ? lbl : "-", nm, sizeof(nm));
+    if (lim > 0) fmt_bytes(lim, ls, sizeof(ls));
+    else snprintf(ls, sizeof(ls), "مفتوحة ♾️");
+    fmt_bytes(used, us, sizeof(us));
+    fmt_bytes(alloc, al, sizeof(al));
+    bool over = (lim > 0 && alloc > lim);
+
+    char *msg = calloc(1, 1024);
+    char *kb = calloc(1, 1536);
+    if (!msg || !kb) { free(msg); free(kb); return; }
+
+    snprintf(msg, 1024,
+             "👤 <b>إدارة المستخدم: %s</b>\n"
+             "🆔 المعرف: <code>%s</code>\n"
+             "📦 الباقة الكلية: <b>%s</b>\n"
+             "📊 الاستهلاك الكلي: <b>%s</b>\n"
+             "⚖️ الموزع على الأجهزة (%d): <b>%s</b>%s",
+             nm, target_cid, ls, us, dcnt, al, over ? "\n⚠️ <b>تجاوز الحد الكلي!</b>" : "");
+
+    size_t kpos = snprintf(kb, 1536,
+                           "{\"inline_keyboard\":["
+                           "[{\"text\":\"✏️ تعديل الاسم\",\"callback_data\":\"tgu_name:%s\"},"
+                           "{\"text\":\"📦 رقم مخصص\",\"callback_data\":\"tgu_qinp:%s\"}],"
+                           "[{\"text\":\"50G\",\"callback_data\":\"tgu_q:%s:50\"},"
+                           "{\"text\":\"100G\",\"callback_data\":\"tgu_q:%s:100\"},"
+                           "{\"text\":\"150G\",\"callback_data\":\"tgu_q:%s:150\"},"
+                           "{\"text\":\"مفتوحة\",\"callback_data\":\"tgu_q:%s:0\"}]",
+                           target_cid, target_cid, target_cid, target_cid, target_cid, target_cid);
+    for (int i = 0; i < dcnt && kpos + 160 < 1400; i++) {
+        char dnm[28], rem_s[24];
+        uint64_t du = meter_scaled_bytes(devs[i].up_bytes + devs[i].down_bytes);
+        uint64_t dr = (devs[i].quota_bytes > du) ? (devs[i].quota_bytes - du) : 0;
+        json_safe_label(devs[i].name[0] ? devs[i].name : devs[i].mac, dnm, sizeof(dnm));
+        fmt_bytes(dr, rem_s, sizeof(rem_s));
+        kpos += snprintf(kb + kpos, 1536 - kpos,
+                         ",[{\"text\":\"📱 %s (متبقي %s)\",\"callback_data\":\"mdev:%s\"}]",
+                         dnm, rem_s, devs[i].mac);
+    }
+    snprintf(kb + kpos, 1536 - kpos,
+             ",[{\"text\":\"🗑️ حذف المستخدم\",\"callback_data\":\"tgu_del:%s\"},"
+             "{\"text\":\"🔙 رجوع\",\"callback_data\":\"adm_tg_users\"}]]}",
+             target_cid);
 
     tg_edit_or_send(chat_id, edit_msg_id, msg, kb);
     free(msg);
@@ -2734,6 +2865,89 @@ static void send_user_dev_alloc_menu(const char *chat_id, int64_t edit_msg_id, c
     tg_edit_or_send(chat_id, edit_msg_id, msg, kb);
 }
 
+static void send_user_vip_menu(const char *chat_id, int64_t edit_msg_id) {
+    rmeter_device_t own[8];
+    int n = 0;
+    pthread_mutex_lock(&g_lock);
+    for (int i = 0; i < g_device_count && n < 8; i++) {
+        if (strcmp(g_devices[i].tg_chat_id, chat_id) == 0) own[n++] = g_devices[i];
+    }
+    pthread_mutex_unlock(&g_lock);
+    if (n == 0) {
+        tg_edit_or_send(chat_id, edit_msg_id, "⛔ لا توجد أجهزة مربوطة بمعرفك حالياً.", NULL);
+        return;
+    }
+    char *kb = calloc(1, 1400);
+    if (!kb) return;
+    size_t kpos = snprintf(kb, 1400, "{\"inline_keyboard\":[");
+    time_t now = time(NULL);
+    for (int i = 0; i < n && kpos + 160 < 1340; i++) {
+        char nm[32], st[32];
+        json_safe_label(own[i].name[0] ? own[i].name : own[i].mac, nm, sizeof(nm));
+        if (own[i].gaming_mode) {
+            if (own[i].vip_until > now) snprintf(st, sizeof(st), "🎮 متبقي %ld د", (long)((own[i].vip_until - now + 59) / 60));
+            else snprintf(st, sizeof(st), "🎮 VIP مفعّل");
+        } else {
+            snprintf(st, sizeof(st), "📱 عادي");
+        }
+        kpos += snprintf(kb + kpos, 1400 - kpos, "%s[{\"text\":\"%s (%s)\",\"callback_data\":\"uvip_dev:%s\"}]",
+                         (i > 0) ? "," : "", nm, st, own[i].mac);
+    }
+    snprintf(kb + kpos, 1400 - kpos, ",[{\"text\":\"🔄 تحديث\",\"callback_data\":\"uvip_list\"}]]}");
+    tg_edit_or_send(chat_id, edit_msg_id, "🎮 <b>تفعيل أولوية VIP للألعاب والبث:</b>\nاختر الجهاز لتفعيل أو إيقاف VIP:", kb);
+    free(kb);
+}
+
+static void send_user_vip_dur_menu(const char *chat_id, int64_t edit_msg_id, const char *mac) {
+    rmeter_device_t dev;
+    bool found = false;
+    pthread_mutex_lock(&g_lock);
+    int idx = meter_find_by_mac(mac);
+    if (idx >= 0 && strcmp(g_devices[idx].tg_chat_id, chat_id) == 0) {
+        dev = g_devices[idx];
+        found = true;
+    }
+    pthread_mutex_unlock(&g_lock);
+    if (!found) { send_user_vip_menu(chat_id, edit_msg_id); return; }
+
+    char nm[64], st[64];
+    html_escape(dev.name[0] ? dev.name : dev.mac, nm, sizeof(nm));
+    time_t now = time(NULL);
+    if (dev.gaming_mode) {
+        if (dev.vip_until > now) snprintf(st, sizeof(st), "🎮 مفعّل (متبقي %ld دقيقة)", (long)((dev.vip_until - now + 59) / 60));
+        else snprintf(st, sizeof(st), "🎮 مفعّل (دائم)");
+    } else {
+        snprintf(st, sizeof(st), "⚪ غير مفعّل");
+    }
+    char msg[320];
+    snprintf(msg, sizeof(msg), "🎮 <b>إعداد VIP للجهاز: %s</b>\nالحالة: <b>%s</b>\n\nاختر مدة التفعيل:", nm, st);
+    char kb[768];
+    snprintf(kb, sizeof(kb),
+             "{\"inline_keyboard\":["
+             "[{\"text\":\"⏱️ 15 دقيقة\",\"callback_data\":\"uvip_set:%s:15\"},"
+             "{\"text\":\"⏱️ 30 دقيقة\",\"callback_data\":\"uvip_set:%s:30\"}],"
+             "[{\"text\":\"⏱️ ساعة (60 د)\",\"callback_data\":\"uvip_set:%s:60\"},"
+             "{\"text\":\"✏️ وقت مخصص\",\"callback_data\":\"uvip_pinp:%s\"}],"
+             "%s"
+             "[{\"text\":\"🔙 رجوع لأجهزتي\",\"callback_data\":\"uvip_list\"}]"
+             "]}",
+             dev.mac, dev.mac, dev.mac, dev.mac,
+             dev.gaming_mode ? "" : "");
+    if (dev.gaming_mode) {
+        snprintf(kb, sizeof(kb),
+                 "{\"inline_keyboard\":["
+                 "[{\"text\":\"⏱️ 15 دقيقة\",\"callback_data\":\"uvip_set:%s:15\"},"
+                 "{\"text\":\"⏱️ 30 دقيقة\",\"callback_data\":\"uvip_set:%s:30\"}],"
+                 "[{\"text\":\"⏱️ ساعة (60 د)\",\"callback_data\":\"uvip_set:%s:60\"},"
+                 "{\"text\":\"✏️ وقت مخصص\",\"callback_data\":\"uvip_pinp:%s\"}],"
+                 "[{\"text\":\"⛔ إيقاف VIP الآن\",\"callback_data\":\"uvip_set:%s:0\"}],"
+                 "[{\"text\":\"🔙 رجوع لأجهزتي\",\"callback_data\":\"uvip_list\"}]"
+                 "]}",
+                 dev.mac, dev.mac, dev.mac, dev.mac, dev.mac);
+    }
+    tg_edit_or_send(chat_id, edit_msg_id, msg, kb);
+}
+
 static void send_prompt_msg(const char *chat_id, int64_t edit_msg_id, const char *text);
 
 static bool handle_callback_user(const char *cb_id, const char *chat_id, int64_t msg_id, const char *data) {
@@ -2741,6 +2955,38 @@ static bool handle_callback_user(const char *cb_id, const char *chat_id, int64_t
         send_user_alloc_menu(chat_id, msg_id);
         tg_answer_callback_sync(cb_id, NULL);
         return true;
+    }
+    if (strcmp(data, "uvip_list") == 0) {
+        send_user_vip_menu(chat_id, msg_id);
+        tg_answer_callback_sync(cb_id, NULL);
+        return true;
+    }
+    if (strncmp(data, "uvip_dev:", 9) == 0) {
+        send_user_vip_dur_menu(chat_id, msg_id, data + 9);
+        tg_answer_callback_sync(cb_id, NULL);
+        return true;
+    }
+    if (strncmp(data, "uvip_pinp:", 10) == 0) {
+        pend_set(chat_id, PEND_USER_VIP_MIN, data + 10);
+        send_prompt_msg(chat_id, msg_id, "⏱️ أرسل الآن مدة تفعيل VIP بالدقائق (مثال: <code>45</code> أو <code>120</code>):");
+        tg_answer_callback_sync(cb_id, NULL);
+        return true;
+    }
+    if (strncmp(data, "uvip_set:", 9) == 0) {
+        char mac[24] = {0};
+        unsigned int mins = 0;
+        const char *tail = NULL;
+        if (parse_mac_tail(data + 9, 1, mac, sizeof(mac), &tail) && sscanf(tail, "%u", &mins) == 1) {
+            if (meter_user_set_device_vip(chat_id, mac, mins)) {
+                meter_save_all();
+                meter_write_ram_json();
+                tg_answer_callback_sync(cb_id, mins ? "✅ تم تفعيل VIP" : "⛔ تم إيقاف VIP");
+                send_user_vip_dur_menu(chat_id, msg_id, mac);
+            } else {
+                tg_answer_callback_sync(cb_id, "تعذر تعديل VIP لهذا الجهاز");
+            }
+            return true;
+        }
     }
     if (strncmp(data, "u_dev:", 6) == 0) {
         send_user_dev_alloc_menu(chat_id, msg_id, data + 6);
@@ -2816,7 +3062,7 @@ static bool handle_callback_user(const char *cb_id, const char *chat_id, int64_t
 static bool is_nav_or_cmd(const char *text, const char *cmd) {
     if (!text || text[0] == '/') return true;
     (void)cmd;
-    if (strstr(text, "القائمة الرئيسية") || strstr(text, "استهلاك الباقة") ||
+    if (strstr(text, "القائمة الرئيسية") || strstr(text, "استهلاك الباقة") || strstr(text, "تقسيم الباقة") ||
         strstr(text, "الأجهزة المتصلة") || strstr(text, "فحص السرعة") ||
         strstr(text, "حالة الراوتر") || strstr(text, "الوايفاي والشبكة") ||
         strstr(text, "إعادة التشغيل") || strstr(text, "فحص التحديثات") ||
@@ -2932,6 +3178,42 @@ static void handle_pending_input(const char *chat_id, pend_kind_t kind, const ch
         meter_save_all();
         meter_write_ram_json();
         send_admin_unassigned_menu(chat_id, 0);
+    } else if (kind == PEND_ADMIN_TGU_ADD) {
+        char cid[32] = {0}, lbl[48] = {0};
+        double gb = 0;
+        int n = sscanf(s, "%31s %47s %lf", cid, lbl, &gb);
+        if (n < 2 || gb < 0) {
+            telegram_send_message(chat_id, "⚠️ أرسل البيانات بصيغة: <code>ChatID الاسم الجيجات</code> (مثال: <code>123456789 أحمد 100</code>).", NULL);
+            return;
+        }
+        uint64_t unit = (g_config.gb_standard == 1000) ? 1000000000ULL : 1073741824ULL;
+        uint64_t tb = (gb > 0) ? (uint64_t)(gb * (double)unit) : 0;
+        if (!meter_set_tg_user_quota(cid, lbl, tb)) {
+            telegram_send_message(chat_id, "⚠️ تعذر إضافة المستخدم (تحقق من المعرف أو الحد الأقصى).", NULL);
+            return;
+        }
+        meter_save_all();
+        meter_write_ram_json();
+        send_admin_tg_user_detail(chat_id, 0, cid);
+    } else if (kind == PEND_ADMIN_TGU_NAME) {
+        if (!len) { telegram_send_message(chat_id, "⚠️ الاسم غير صالح.", NULL); return; }
+        uint64_t tb = 0;
+        pthread_mutex_lock(&g_lock);
+        int qi = meter_find_tg_user_quota(mac);
+        if (qi >= 0) tb = g_tg_quotas[qi].total_quota_bytes;
+        pthread_mutex_unlock(&g_lock);
+        meter_set_tg_user_quota(mac, s, tb);
+        meter_save_all();
+        meter_write_ram_json();
+        send_admin_tg_user_detail(chat_id, 0, mac);
+    } else if (kind == PEND_ADMIN_TGU_QUOTA) {
+        double gb = atof(s);
+        if (gb < 0) gb = 0;
+        uint64_t unit = (g_config.gb_standard == 1000) ? 1000000000ULL : 1073741824ULL;
+        meter_set_tg_user_quota(mac, NULL, (gb > 0) ? (uint64_t)(gb * (double)unit) : 0);
+        meter_save_all();
+        meter_write_ram_json();
+        send_admin_tg_user_detail(chat_id, 0, mac);
     } else if (kind == PEND_USER_DEV_QUOTA) {
         double gb = atof(s);
         if (gb < 0) {
@@ -2950,6 +3232,22 @@ static void handle_pending_input(const char *chat_id, pend_kind_t kind, const ch
             char emsg[220];
             snprintf(emsg, sizeof(emsg), "⚠️ %s", err[0] ? err : "تعذر تعديل الباقة");
             telegram_send_message(chat_id, emsg, TG_USER_KEYBOARD);
+        }
+    } else if (kind == PEND_USER_VIP_MIN) {
+        int mins = atoi(s);
+        if (mins <= 0 || mins > 1440) {
+            telegram_send_message(chat_id, "⚠️ أرسل مدة صحيحة بالدقائق (من 1 إلى 1440 دقيقة).", TG_USER_KEYBOARD);
+            return;
+        }
+        if (meter_user_set_device_vip(chat_id, mac, (uint32_t)mins)) {
+            meter_save_all();
+            meter_write_ram_json();
+            char okm[96];
+            snprintf(okm, sizeof(okm), "🎮 تم تفعيل VIP على الجهاز لمدة %d دقيقة.", mins);
+            telegram_send_message(chat_id, okm, TG_USER_KEYBOARD);
+            send_user_vip_dur_menu(chat_id, 0, mac);
+        } else {
+            telegram_send_message(chat_id, "⚠️ تعذر تفعيل VIP لهذا الجهاز.", TG_USER_KEYBOARD);
         }
     } else if (kind == PEND_WAN_SPD) {
         double dl_m = 0, ul_m = -1;
@@ -3052,11 +3350,12 @@ static void handle_command(const char *chat_id, const char *text) {
 
     /* Normal non-admin user view (strictly limited to own linked device(s)) */
     if (!is_adm) {
-        if (!is_nav_or_cmd(text, cmd) && !strstr(text, "توزيع") && !strstr(text, "استهلاك") &&
+        if (!is_nav_or_cmd(text, cmd) && !strstr(text, "توزيع") && !strstr(text, "استهلاك") && !strstr(text, "VIP") &&
             !strstr(text, "سرع") && !strstr(text, "الصلاة") && !strstr(text, "صلاه") && !strstr(text, "مساعدة")) {
             pend_kind_t pkind = PEND_NONE;
-            char pmac[24] = {0};
-            if (pend_pop(chat_id, &pkind, pmac, sizeof(pmac)) && pkind == PEND_USER_DEV_QUOTA) {
+            char pmac[32] = {0};
+            if (pend_pop(chat_id, &pkind, pmac, sizeof(pmac)) &&
+                (pkind == PEND_USER_DEV_QUOTA || pkind == PEND_USER_VIP_MIN)) {
                 handle_pending_input(chat_id, pkind, pmac, text);
                 return;
             }
@@ -3065,6 +3364,8 @@ static void handle_command(const char *chat_id, const char *text) {
         }
         if (strstr(text, "توزيع") || strcmp(cmd, "/alloc") == 0) {
             send_user_alloc_menu(chat_id, 0);
+        } else if (strstr(text, "VIP") || strstr(text, "vip") || strcmp(cmd, "/vip") == 0) {
+            send_user_vip_menu(chat_id, 0);
         } else if (strstr(text, "استهلاك") || strstr(text, "سرع") || strcmp(cmd, "/quota") == 0 || strcmp(cmd, "/speed") == 0) {
             send_normal_user_report(chat_id);
         } else if (strstr(text, "الصلاة") || strstr(text, "صلاه") || strcmp(cmd, "/prayer") == 0) {
@@ -3122,7 +3423,7 @@ static void handle_command(const char *chat_id, const char *text) {
         return;
     }
 
-    if (strcmp(cmd, "/quota") == 0 || strstr(text, "استهلاك الباقة") || strcmp(cmd, "استهلاك") == 0) {
+    if (strcmp(cmd, "/quota") == 0 || strstr(text, "استهلاك الباقة") || strstr(text, "تقسيم الباقة") || strcmp(cmd, "استهلاك") == 0) {
         send_admin_quota_menu(chat_id, 0);
     } else if (strcmp(cmd, "/devices") == 0 || strstr(text, "الأجهزة المتصلة") || strcmp(cmd, "اجهزة") == 0) {
         send_admin_devices_menu(chat_id, 0, false);
@@ -3447,6 +3748,41 @@ static bool handle_callback_admin(const char *cb_id, const char *chat_id, int64_
         snprintf(tmsg, sizeof(tmsg), "✅ تم التطبيق على %d جهاز غير مربوط", cnt);
         tg_answer_callback_sync(cb_id, tmsg);
         send_admin_unassigned_menu(chat_id, msg_id);
+        return true;
+    } else if (strcmp(data, "adm_tg_users") == 0) {
+        send_admin_tg_users_menu(chat_id, msg_id);
+    } else if (strncmp(data, "adm_tgu:", 8) == 0) {
+        send_admin_tg_user_detail(chat_id, msg_id, data + 8);
+    } else if (strcmp(data, "adm_tgu_add") == 0) {
+        pend_set(chat_id, PEND_ADMIN_TGU_ADD, "");
+        send_prompt_msg(chat_id, msg_id, "➕ أرسل بيانات المستخدم الجديد بصيغة:\n<code>ChatID الاسم الجيجات</code>\nمثال: <code>123456789 أحمد 100</code>");
+    } else if (strncmp(data, "tgu_name:", 9) == 0) {
+        pend_set(chat_id, PEND_ADMIN_TGU_NAME, data + 9);
+        send_prompt_msg(chat_id, msg_id, "✏️ أرسل الآن <b>الاسم الجديد</b> للمستخدم:");
+    } else if (strncmp(data, "tgu_qinp:", 9) == 0) {
+        pend_set(chat_id, PEND_ADMIN_TGU_QUOTA, data + 9);
+        send_prompt_msg(chat_id, msg_id, "📦 أرسل الآن <b>الباقة الكلية الجديدة (GB)</b> للمستخدم (أو <code>0</code> لمفتوحة):");
+    } else if (strncmp(data, "tgu_q:", 6) == 0) {
+        char tcid[32] = {0};
+        double gb = 0;
+        const char *sep = strrchr(data + 6, ':');
+        if (sep && sep > data + 6) {
+            size_t clen = (size_t)(sep - (data + 6));
+            if (clen >= sizeof(tcid)) clen = sizeof(tcid) - 1;
+            memcpy(tcid, data + 6, clen);
+            gb = atof(sep + 1);
+            uint64_t unit = (g_config.gb_standard == 1000) ? 1000000000ULL : 1073741824ULL;
+            meter_set_tg_user_quota(tcid, NULL, (gb > 0) ? (uint64_t)(gb * (double)unit) : 0);
+            meter_save_all();
+            meter_write_ram_json();
+            send_admin_tg_user_detail(chat_id, msg_id, tcid);
+        }
+    } else if (strncmp(data, "tgu_del:", 8) == 0) {
+        meter_delete_tg_user_quota(data + 8);
+        meter_save_all();
+        meter_write_ram_json();
+        tg_answer_callback_sync(cb_id, "🗑️ تم حذف المستخدم");
+        send_admin_tg_users_menu(chat_id, msg_id);
         return true;
     } else if (strcmp(data, "rstall_ask") == 0) {
         tg_edit_or_send(chat_id, msg_id,

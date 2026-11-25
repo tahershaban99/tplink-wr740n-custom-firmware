@@ -48,6 +48,7 @@ int  meter_find_tg_user_quota(const char *chat_id);
 bool meter_check_tg_user_overage(const char *chat_id, uint64_t *sum_out, uint64_t *limit_out);
 bool meter_user_redistribute_quota(const char *chat_id, const char *mac, uint64_t new_quota_bytes,
                                    char *err_buf, size_t err_sz);
+bool meter_user_set_device_vip(const char *chat_id, const char *mac, uint32_t minutes);
 int  meter_apply_unassigned_policy_to_existing(void);
 bool meter_reset_device_usage(const char *mac);
 bool meter_delete_device(const char *mac);

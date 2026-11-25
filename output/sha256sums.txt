@@ -1,2 +1,2 @@
-6a676112478af6df82e87a2e7d72781200e5b86a8e48a8883704903f09c6efdf  routermeter-wr740n-v4-sysupgrade.bin
-2d0d41d9b469698cba2ff34e25984249430ba7b73d65ec827735976d63a8c59a  routermeter-wr740n-v4-factory.bin
+0fb22f7832679f03b9bf76bae1cbc2d3c0b1ec0edd1b688bd63772e6d5df6455  routermeter-wr740n-v4-sysupgrade.bin
+dbdf6f871371822c7f1fc9a62c2ca221cb7684ee7fd2a1f2fea2c7dda12ac72e  routermeter-wr740n-v4-factory.bin

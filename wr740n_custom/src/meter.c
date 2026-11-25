@@ -854,6 +854,13 @@ void meter_tick(double dt_sec) {
 
         g_devices[i].cur_up_bps = smooth_bps(g_devices[i].cur_up_bps, inst_up);
         g_devices[i].cur_down_bps = smooth_bps(g_devices[i].cur_down_bps, inst_dn);
+        if (g_devices[i].gaming_mode && g_devices[i].vip_until > 0 && now >= g_devices[i].vip_until) {
+            g_devices[i].gaming_mode = false;
+            g_devices[i].vip_until = 0;
+            g_fw_dirty = true;
+            g_tc_dirty = true;
+            g_flash_dirty = true;
+        }
 
         if ((du > 0 || dd > 0) && !(g_devices[i].is_wifi && s_iw_ok && !s_wifi_seen[i])) {
             if (!g_devices[i].online || g_devices[i].connected_at == 0) g_devices[i].connected_at = now;
@@ -1187,6 +1194,7 @@ bool meter_set_device_gaming(const char *mac, bool gaming) {
     int idx = meter_find_by_mac_or_ip(mac);
     if (idx < 0) { pthread_mutex_unlock(&g_lock); return false; }
     g_devices[idx].gaming_mode = gaming;
+    g_devices[idx].vip_until = 0;
     g_fw_dirty = true;
     g_tc_dirty = true;
     g_flash_dirty = true;
@@ -1408,6 +1416,28 @@ bool meter_user_redistribute_quota(const char *chat_id, const char *mac, uint64_
         g_devices[idx].auto_blocked = false;
         g_fw_dirty = true;
     }
+    g_flash_dirty = true;
+    pthread_mutex_unlock(&g_lock);
+    return true;
+}
+
+bool meter_user_set_device_vip(const char *chat_id, const char *mac, uint32_t minutes) {
+    if (!chat_id || !chat_id[0] || !mac || !mac[0]) return false;
+    pthread_mutex_lock(&g_lock);
+    int idx = meter_find_by_mac_or_ip(mac);
+    if (idx < 0 || strcmp(g_devices[idx].tg_chat_id, chat_id) != 0) {
+        pthread_mutex_unlock(&g_lock);
+        return false;
+    }
+    if (minutes == 0) {
+        g_devices[idx].gaming_mode = false;
+        g_devices[idx].vip_until = 0;
+    } else {
+        g_devices[idx].gaming_mode = true;
+        g_devices[idx].vip_until = time(NULL) + (time_t)minutes * 60;
+    }
+    g_fw_dirty = true;
+    g_tc_dirty = true;
     g_flash_dirty = true;
     pthread_mutex_unlock(&g_lock);
     return true;
