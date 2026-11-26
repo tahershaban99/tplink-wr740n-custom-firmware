@@ -355,6 +355,112 @@ void fazakkir_write_status_json(void) {
     rename(tmp_path, FAZAKKIR_STATUS_PATH);
 }
 
+static double fz_fmod(double x, double m) {
+    double r = x - (long long)(x / m) * m;
+    return (r < 0.0) ? (r + m) : r;
+}
+
+static double fz_sin_r(double x) {
+    const double PI = 3.14159265358979323846;
+    x = fz_fmod(x + PI, 2.0 * PI) - PI;
+    if (x > PI * 0.5) x = PI - x;
+    else if (x < -PI * 0.5) x = -PI - x;
+    double x2 = x * x;
+    return x * (1.0 - x2 / 6.0 * (1.0 - x2 / 20.0 * (1.0 - x2 / 42.0)));
+}
+
+static double fz_cos_r(double x) { return fz_sin_r(x + 1.5707963267948966); }
+static double fz_sin_d(double d) { return fz_sin_r(d * 0.017453292519943295); }
+static double fz_cos_d(double d) { return fz_cos_r(d * 0.017453292519943295); }
+static double fz_tan_d(double d) { double c = fz_cos_d(d); return (c == 0.0) ? 0.0 : (fz_sin_d(d) / c); }
+
+static double fz_atan_r(double x) {
+    const double PI = 3.14159265358979323846;
+    bool inv = false, neg = (x < 0.0);
+    if (neg) x = -x;
+    if (x > 1.0) { x = 1.0 / x; inv = true; }
+    double a = x;
+    if (x > 0.26794919) {
+        double y = (x * 1.73205080757 - 1.0) / (1.73205080757 + x);
+        double y2 = y * y;
+        a = 0.523598775598 + y * (1.0 - y2 * (1.0 / 3.0 - y2 * (1.0 / 5.0 - y2 / 7.0)));
+    } else {
+        double x2 = x * x;
+        a = x * (1.0 - x2 * (1.0 / 3.0 - x2 * (1.0 / 5.0 - x2 / 7.0)));
+    }
+    if (inv) a = PI * 0.5 - a;
+    return neg ? -a : a;
+}
+
+static double fz_atan2_d(double y, double x) {
+    const double R2D = 57.29577951308232;
+    if (x > 0.0) return fz_atan_r(y / x) * R2D;
+    if (x < 0.0) return (fz_atan_r(y / x) + (y >= 0.0 ? 3.14159265358979323846 : -3.14159265358979323846)) * R2D;
+    return (y > 0.0) ? 90.0 : ((y < 0.0) ? -90.0 : 0.0);
+}
+
+static double fz_acos_d(double x) {
+    if (x >= 1.0) return 0.0;
+    if (x <= -1.0) return 180.0;
+    /* sqrt(1 - x^2) via Newton iterations */
+    double v = 1.0 - x * x;
+    double s = v > 0.0 ? 0.5 : 0.0;
+    for (int k = 0; k < 8 && s > 0.0; k++) s = 0.5 * (s + v / s);
+    return fz_atan2_d(s, x);
+}
+
+static double fz_asin_d(double x) { return 90.0 - fz_acos_d(x); }
+
+static void lookup_city_coords(const char *city, double *lat, double *lon) {
+    static const struct { const char *name; double lat; double lon; } cities[] = {
+        {"Cairo", 30.0444, 31.2357}, {"Giza", 30.0131, 31.2089},
+        {"Alexandria", 31.2001, 29.9187}, {"Mansoura", 31.0409, 31.3785},
+        {"Tanta", 30.7865, 31.0004}, {"Asyut", 27.1809, 31.1837},
+        {"Riyadh", 24.7136, 46.6753}, {"Jeddah", 21.4858, 39.1925},
+        {"Makkah", 21.3891, 39.8579}, {"Dubai", 25.2048, 55.2708}
+    };
+    *lat = 30.0444; *lon = 31.2357;
+    if (!city) return;
+    for (size_t i = 0; i < sizeof(cities) / sizeof(cities[0]); i++) {
+        if (strstr(city, cities[i].name)) { *lat = cities[i].lat; *lon = cities[i].lon; return; }
+    }
+}
+
+static void calc_prayers_offline(const struct tm *tm_val, const char *city, int tz_hrs) {
+    double lat = 30.0444, lon = 31.2357;
+    lookup_city_coords(city, &lat, &lon);
+    int y = tm_val->tm_year + 1900, m = tm_val->tm_mon + 1, d = tm_val->tm_mday;
+    if (m <= 2) { y -= 1; m += 12; }
+    int A = y / 100, B = 2 - A + A / 4;
+    double jd = (long)(365.25 * (y + 4716)) + (long)(30.6001 * (m + 1)) + d + B - 1524.5;
+    double D = jd - 2451545.0;
+    double g = fz_fmod(357.529 + 0.98560028 * D, 360.0);
+    double q = fz_fmod(280.459 + 0.98564736 * D, 360.0);
+    double L = fz_fmod(q + 1.915 * fz_sin_d(g) + 0.020 * fz_sin_d(2.0 * g), 360.0);
+    double e = 23.439 - 0.00000036 * D;
+    double decl = fz_asin_d(fz_sin_d(e) * fz_sin_d(L));
+    double ra = fz_fmod(fz_atan2_d(fz_cos_d(e) * fz_sin_d(L), fz_cos_d(L)) / 15.0, 24.0);
+    double eqt = q / 15.0 - ra;
+    if (eqt > 12.0) eqt -= 24.0;
+    if (eqt < -12.0) eqt += 24.0;
+    double dhuhr = 12.0 + (double)tz_hrs - lon / 15.0 - eqt;
+
+    double ha_fajr = fz_acos_d((-fz_sin_d(19.5) - fz_sin_d(lat) * fz_sin_d(decl)) / (fz_cos_d(lat) * fz_cos_d(decl))) / 15.0;
+    double ha_magh = fz_acos_d((-fz_sin_d(0.833) - fz_sin_d(lat) * fz_sin_d(decl)) / (fz_cos_d(lat) * fz_cos_d(decl))) / 15.0;
+    double ha_isha = fz_acos_d((-fz_sin_d(17.5) - fz_sin_d(lat) * fz_sin_d(decl)) / (fz_cos_d(lat) * fz_cos_d(decl))) / 15.0;
+    double diff = lat - decl; if (diff < 0.0) diff = -diff;
+    double asr_alt = fz_atan_r(1.0 / (1.0 + fz_tan_d(diff))) * 57.29577951308232;
+    double ha_asr = fz_acos_d((fz_sin_d(asr_alt) - fz_sin_d(lat) * fz_sin_d(decl)) / (fz_cos_d(lat) * fz_cos_d(decl))) / 15.0;
+
+    double hrs[5] = { dhuhr - ha_fajr, dhuhr, dhuhr + ha_asr, dhuhr + ha_magh, dhuhr + ha_isha };
+    for (int i = 0; i < 5; i++) {
+        double h = fz_fmod(hrs[i] + 24.0, 24.0);
+        int mins = (int)(h * 60.0 + 0.5);
+        if (mins >= 1440) mins -= 1440;
+        snprintf(g_fazakkir.prayer_times[i], sizeof(g_fazakkir.prayer_times[i]), "%02d:%02d", mins / 60, mins % 60);
+    }
+}
+
 bool fazakkir_refresh_prayers(char *err, size_t err_sz) {
     s_last_prayer_fetch = time(NULL);
     char c_enc[128], co_enc[128], url[384];
@@ -373,8 +479,18 @@ bool fazakkir_refresh_prayers(char *err, size_t err_sz) {
         snprintf(url, sizeof(url),
                  "http://api.aladhan.com/v1/timingsByCity?city=%s&country=%s&method=%d",
                  c_enc, co_enc, g_fazakkir.method > 0 ? g_fazakkir.method : 5);
-        if (!fetch_http_body(url, buf, 8192)) {
+        if (!fetch_http_body(url, buf, 8192) || !strstr(buf, "\"timings\"")) {
             free(buf);
+            time_t local_t = time(NULL) + (time_t)g_config.auto_reboot_tz * 3600;
+            struct tm tm_val;
+            if (gmtime_r(&local_t, &tm_val)) {
+                calc_prayers_offline(&tm_val, g_fazakkir.city, g_config.auto_reboot_tz);
+                snprintf(g_fazakkir.prayer_date, sizeof(g_fazakkir.prayer_date),
+                         "%04d-%02d-%02d", tm_val.tm_year + 1900, tm_val.tm_mon + 1, tm_val.tm_mday);
+                s_last_prayer_fetch = time(NULL);
+                fazakkir_write_status_json();
+                return true;
+            }
             if (err) snprintf(err, err_sz, "تعذر الاتصال بخادم مواقيت الصلاة");
             return false;
         }
