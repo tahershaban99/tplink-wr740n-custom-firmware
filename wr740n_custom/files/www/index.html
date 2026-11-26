@@ -1950,9 +1950,16 @@ async function refreshPrayers(){
 }
 async function autolocatePrayers(){
   toast('جاري تحديد موقعك تلقائياً...');
-  const r=await api('fazakkir_autolocate');
-  toast(r.msg||(r.ok?'تم التحديد':'تعذر التحديد'));
-  if(r.ok) loadFazakkir();
+  try{
+    const r=await api('fazakkir_autolocate');
+    if(r&&r.ok){
+      if(r.city)$('fzCity').value=r.city;
+      if(r.country)$('fzCountry').value=r.country;
+      await saveFazakkir();
+      await loadFazakkir();
+    }
+    toast((r&&r.msg)||(r&&r.ok?'تم تحديد الموقع وتحديث المواقيت':'تعذر التحديد'));
+  }catch(e){toast('تعذر الاتصال بالراوتر لتحديد الموقع');}
 }
 async function fetchZikrNow(){
   await saveFazakkir();

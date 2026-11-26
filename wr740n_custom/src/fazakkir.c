@@ -78,7 +78,7 @@ static bool fetch_http_body(const char *url, char *buf, size_t bsz) {
     if (!safe_url_str(url) || !buf || bsz < 64) return false;
     char cmd[512];
     snprintf(cmd, sizeof(cmd),
-             "uclient-fetch -q -T 8 --no-check-certificate -O - '%s' 2>/dev/null", url);
+             "uclient-fetch -q -T 4 --no-check-certificate -O - '%s' 2>/dev/null", url);
     FILE *fp = popen(cmd, "r");
     if (!fp) return false;
     size_t tot = 0;
@@ -546,6 +546,7 @@ bool fazakkir_autolocate(char *city_out, size_t csz, char *country_out, size_t r
     }
     snprintf(g_fazakkir.city, sizeof(g_fazakkir.city), "%s", c);
     snprintf(g_fazakkir.country, sizeof(g_fazakkir.country), "%s", co);
+    fazakkir_write_status_json();
     if (city_out) snprintf(city_out, csz, "%s", c);
     if (country_out) snprintf(country_out, rsz, "%s", co);
     return true;
