@@ -338,6 +338,19 @@ static void apply_dir_htb(rmeter_device_t *devs, int count, const char *ifname,
              ifname, major);
     run_cmd(cmd);
 
+    if (vip_cnt > 0) {
+        uint32_t fast_rate = (root_wire * 30U) / 100U;
+        if (fast_rate < 256) fast_rate = 256;
+        if (fast_rate > root_wire) fast_rate = root_wire;
+        snprintf(cmd, sizeof(cmd),
+                 "tc class add dev %s parent %d:1 classid %d:2 htb rate %ukbit ceil %ukbit burst %u cburst %u quantum 1514 prio 0 && "
+                 "tc qdisc add dev %s parent %d:2 handle 2: fq_codel limit 300 quantum 1514 target 5ms interval 50ms noecn 2>/dev/null ; "
+                 "tc filter add dev %s protocol ip parent %d:0 prio 1 u32 match ip tos 0xb8 0xfc flowid %d:2",
+                 ifname, major, major, fast_rate, root_wire, def_burst, root_burst,
+                 ifname, major, ifname, major, major);
+        run_cmd(cmd);
+    }
+
     for (int i = 0; i < count; i++) {
         if (devs[i].blocked || !ip_valid(devs[i].ip)) continue;
         uint32_t cap = devs[i].speed_unlocked ? 0 : (is_dl ? devs[i].cap_down_kbps : devs[i].cap_up_kbps);
@@ -357,7 +370,7 @@ static void apply_dir_htb(rmeter_device_t *devs, int count, const char *ifname,
         if (is_dl) {
             snprintf(cmd, sizeof(cmd),
                      "tc class add dev %s parent %d:1 classid %d:%x htb rate %ukbit ceil %ukbit burst %u cburst %u quantum %u prio %d && "
-                     "tc filter add dev %s protocol ip parent %d:0 prio 1 u32 match ip dst %s/32 flowid %d:%x",
+                     "tc filter add dev %s protocol ip parent %d:0 prio 2 u32 match ip dst %s/32 flowid %d:%x",
                      ifname, major, major, cid, rate_k, ceil_k, dev_burst, dev_burst, dev_q, prio,
                      ifname, major, devs[i].ip, major, cid);
         } else {
@@ -367,15 +380,17 @@ static void apply_dir_htb(rmeter_device_t *devs, int count, const char *ifname,
             run_cmd(cmd);
             snprintf(cmd, sizeof(cmd),
                      "tc class add dev %s parent %d:1 classid %d:%x htb rate %ukbit ceil %ukbit burst %u cburst %u quantum %u prio %d && "
-                     "tc filter add dev %s protocol ip parent %d:0 prio 1 handle 0x%x fw flowid %d:%x",
+                     "tc filter add dev %s protocol ip parent %d:0 prio 2 handle 0x%x fw flowid %d:%x",
                      ifname, major, major, cid, rate_k, ceil_k, dev_burst, dev_burst, dev_q, prio,
                      ifname, major, cid, major, cid);
         }
         run_cmd(cmd);
-        if (ceil_k < 10000U) {
+        if (devs[i].gaming_mode || ceil_k < 10000U) {
             snprintf(cmd, sizeof(cmd),
-                     "tc qdisc add dev %s parent %d:%x handle %x: fq_codel limit 300 quantum 1514 target 15ms interval 150ms noecn 2>/dev/null || true",
-                     ifname, major, cid, cid);
+                     "tc qdisc add dev %s parent %d:%x handle %x: fq_codel limit 300 quantum 1514 target %s interval %s noecn 2>/dev/null || true",
+                     ifname, major, cid, cid,
+                     devs[i].gaming_mode ? "5ms" : "15ms",
+                     devs[i].gaming_mode ? "50ms" : "150ms");
         } else {
             snprintf(cmd, sizeof(cmd),
                      "tc qdisc add dev %s parent %d:%x handle %x: fq_codel limit 600 quantum 1514 noecn 2>/dev/null || true",
