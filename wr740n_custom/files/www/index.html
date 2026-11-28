@@ -1144,7 +1144,7 @@ function openLoginModal(){
 function closeLoginModal(){ $('loginModal').classList.remove('open'); }
 function handleAuthClick(){ if(isAdmin) doLogout(); else openLoginModal(); }
 function stopPoll(){ if(pollTimer){ clearInterval(pollTimer); pollTimer = null; } }
-function startPoll(){ if(!pollTimer) pollTimer = setInterval(poll, 1000); }
+function startPoll(){ if(!pollTimer) pollTimer = setInterval(poll, 2000); }
 
 async function api(act, body){
   const opt = body!==undefined ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)} : {method:'GET'};

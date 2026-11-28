@@ -870,7 +870,7 @@ void meter_tick(double dt_sec) {
             g_devices[i].online = s_wifi_seen[i];
         } else {
             if (g_devices[i].online && g_devices[i].ip[0] &&
-                (now - g_devices[i].last_seen) >= 6 && (now - s_last_arp_probe[i]) >= 6) {
+                (now - g_devices[i].last_seen) >= 8 && (now - s_last_arp_probe[i]) >= 12) {
                 s_last_arp_probe[i] = now;
                 char pcmd[96];
                 snprintf(pcmd, sizeof(pcmd), "ping -c 1 -W 1 %s >/dev/null 2>&1 &", g_devices[i].ip);
