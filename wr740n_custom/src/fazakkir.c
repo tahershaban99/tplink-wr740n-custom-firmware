@@ -257,7 +257,12 @@ void fazakkir_init(void) {
     fazakkir_write_status_json();
 }
 
+static void restore_prayer_restriction(void);
+
 void fazakkir_reload(void) {
+    if (g_fazakkir.prayer_window_end > 0) {
+        restore_prayer_restriction();
+    }
     char saved_times[5][8];
     char saved_date[16];
     int saved_sent[FAZAKKIR_MAX_CARDS];
@@ -723,12 +728,14 @@ static void restore_prayer_restriction(void) {
         g_devices[idx].cap_down_kbps = s_saved[k].was_down;
         g_fw_dirty = true;
         g_tc_dirty = true;
+        g_flash_dirty = true;
     }
     pthread_mutex_unlock(&g_lock);
     s_saved_cnt = 0;
     g_fazakkir.prayer_active_idx = -1;
     g_fazakkir.prayer_window_end = 0;
     fazakkir_write_status_json();
+    meter_write_ram_json();
 }
 
 static int pick_next_zikr_index(void) {
