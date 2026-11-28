@@ -122,6 +122,13 @@ FILE *__wrap_popen(const char *cmd, const char *type) {
             fprintf(f, " 100 %llu RETURN all -- !br-lan br-lan 0.0.0.0/0 %s\n",
                     (unsigned long long)s_dl_bytes[i], s_dl_ips[i]);
         }
+        if (strstr(cmd, "iptables -L RMETER_UL")) {
+            fprintf(f, "Chain RMETER_UL (1 references)\n pkts bytes target prot opt in out source destination\n");
+            for (int i = 0; i < s_ul_cnt; i++) {
+                fprintf(f, " 100 %llu RETURN all -- br-lan !br-lan %s 0.0.0.0/0\n",
+                        (unsigned long long)s_ul_bytes[i], s_ul_ips[i]);
+            }
+        }
         rewind(f);
         return f;
     }

@@ -469,7 +469,6 @@ int main(void) {
 
     time_t last_tick = time(NULL);
     time_t last_save = last_tick;
-    time_t last_state_write = last_tick;
     int last_reboot_day = -1;
     bool reboot_triggered = false;
 
@@ -479,13 +478,11 @@ int main(void) {
 
         time_t now = time(NULL);
         double dt = difftime(now, last_tick);
-        if (dt < 0.5) dt = 1.0;
-        last_tick = now;
-
-        meter_tick(dt);
-        if (now - last_state_write >= 2) {
+        if (dt >= 3.0 || dt < 0.0) {
+            if (dt < 0.5) dt = 3.0;
+            last_tick = now;
+            meter_tick(dt);
             meter_write_ram_json();
-            last_state_write = now;
         }
 
         if (g_flash_dirty && (now - last_save >= 180)) {

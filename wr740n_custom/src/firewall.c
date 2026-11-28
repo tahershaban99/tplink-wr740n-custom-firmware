@@ -161,60 +161,47 @@ void fw_ensure_device_rules(rmeter_device_t *devs, int count) {
     }
 }
 
-static bool parse_chain_counters(const char *chain, bool is_src, rmeter_device_t *devs, int count) {
-    char cmd[128];
-    snprintf(cmd, sizeof(cmd), "iptables -L %s -v -n -x 2>/dev/null", chain);
-    FILE *fp = popen(cmd, "r");
-    if (!fp) return false;
-
-    bool saw_rule = false;
-    char line[512];
-    while (fgets(line, sizeof(line), fp)) {
-        if (strncmp(line, "Chain ", 6) == 0 || strstr(line, "pkts")) continue;
-        unsigned long long pkts = 0, bytes = 0;
-        char target[32], prot[16], opt[16], in_if[32], out_if[32], src[32], dst[32];
-        /* Format with -j RETURN: pkts bytes target prot opt in out source destination */
-        int n = sscanf(line, " %llu %llu %31s %15s %15s %31s %31s %31s %31s",
-                       &pkts, &bytes, target, prot, opt, in_if, out_if, src, dst);
-        if (n < 9) continue;
-        saw_rule = true;
-
-        const char *target_ip = is_src ? src : dst;
-        int match = -1;
-        for (int i = 0; i < count; i++) {
-            if (devs[i].ip[0] && strcmp(devs[i].ip, target_ip) == 0) {
-                if (devs[i].online) { match = i; break; }
-                if (match < 0) match = i;
-            }
-        }
-        if (match >= 0) {
-            if (is_src) {
-                if (bytes >= devs[match].prev_ipt_up) {
-                    uint64_t delta = bytes - devs[match].prev_ipt_up;
-                    devs[match].up_bytes += delta;
-                } else {
-                    devs[match].up_bytes += bytes;
-                }
-                devs[match].prev_ipt_up = bytes;
-            } else {
-                if (bytes >= devs[match].prev_ipt_down) {
-                    uint64_t delta = bytes - devs[match].prev_ipt_down;
-                    devs[match].down_bytes += delta;
-                } else {
-                    devs[match].down_bytes += bytes;
-                }
-                devs[match].prev_ipt_down = bytes;
-            }
-        }
-    }
-    pclose(fp);
-    return saw_rule;
-}
-
 void fw_read_counters(rmeter_device_t *devs, int count) {
-    /* Snapshot previous totals to compute 1-sec bps accurately in meter.c */
-    bool dl_ok = parse_chain_counters("RMETER_DL", false, devs, count);
-    bool ul_ok = parse_chain_counters("RMETER_UL", true, devs, count);
+    /* Read both RMETER_DL and RMETER_UL in a single shell/popen invocation to halve fork overhead */
+    FILE *fp = popen("iptables -L RMETER_DL -v -n -x 2>/dev/null; iptables -L RMETER_UL -v -n -x 2>/dev/null", "r");
+    bool dl_ok = false, ul_ok = false;
+    if (fp) {
+        bool is_src = false;
+        char line[512];
+        while (fgets(line, sizeof(line), fp)) {
+            if (strncmp(line, "Chain RMETER_DL", 15) == 0) { is_src = false; continue; }
+            if (strncmp(line, "Chain RMETER_UL", 15) == 0) { is_src = true; continue; }
+            if (strncmp(line, "Chain ", 6) == 0 || strstr(line, "pkts")) continue;
+            unsigned long long pkts = 0, bytes = 0;
+            char target[32], prot[16], opt[16], in_if[32], out_if[32], src[32], dst[32];
+            int n = sscanf(line, " %llu %llu %31s %15s %15s %31s %31s %31s %31s",
+                           &pkts, &bytes, target, prot, opt, in_if, out_if, src, dst);
+            if (n < 9) continue;
+            if (is_src) ul_ok = true;
+            else dl_ok = true;
+
+            const char *target_ip = is_src ? src : dst;
+            int match = -1;
+            for (int i = 0; i < count; i++) {
+                if (devs[i].ip[0] && strcmp(devs[i].ip, target_ip) == 0) {
+                    if (devs[i].online) { match = i; break; }
+                    if (match < 0) match = i;
+                }
+            }
+            if (match >= 0) {
+                if (is_src) {
+                    if (bytes >= devs[match].prev_ipt_up) devs[match].up_bytes += (bytes - devs[match].prev_ipt_up);
+                    else devs[match].up_bytes += bytes;
+                    devs[match].prev_ipt_up = bytes;
+                } else {
+                    if (bytes >= devs[match].prev_ipt_down) devs[match].down_bytes += (bytes - devs[match].prev_ipt_down);
+                    else devs[match].down_bytes += bytes;
+                    devs[match].prev_ipt_down = bytes;
+                }
+            }
+        }
+        pclose(fp);
+    }
     if (!dl_ok || !ul_ok) {
         for (int i = 0; i < count; i++) {
             if (!dl_ok) devs[i].prev_ipt_down = 0;
